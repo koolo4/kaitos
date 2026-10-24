@@ -1,0 +1,24 @@
+name: Каркас экрана
+steps:
+  - expectVisible: '#titlebar'
+  - expectVisible: '#sidebar'
+  - expectVisible: '#editor-panel'
+  - expectVisible: '#chat'
+  - expectVisible: '#terminal'
+  - expectVisible: '#statusbar'
+  - expectText: { selector: '#project-name', contains: 'demo' }
+  - screenshot: { name: shell, width: 1280 }
+  - click: '#btn-theme'
+  - eval: { code: "document.documentElement.dataset.theme", expect: 'light' }
+  - click: '#btn-theme'
+  - eval: { code: "document.documentElement.dataset.theme", expect: 'dark' }
+  - click: '#btn-settings'
+  - expectVisible: '#settings-modal'
+  - click: '#settings-close'
+  - expectHidden: '#settings-modal'
+  - click: '#btn-sidebar-toggle'
+  - expectClass: { selector: '#app', has: sidebar-collapsed }
+  - click: '#btn-sidebar-toggle'
+  - expectVisible: '#sidebar'
+  - screenshot: { name: shell, width: 375 }
+  - expectNoConsoleErrors:
