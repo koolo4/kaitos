@@ -1,0 +1,96 @@
+[
+  {
+    "key": "setup",
+    "file": "01-setup.md",
+    "title": "[justai] Kaitos 1/12: каркас проекта — package.json, конфиг запуска, README, .gitignore",
+    "deps": []
+  },
+  {
+    "key": "markup",
+    "file": "02-markup.md",
+    "title": "[justai] Kaitos 2/12: разметка экрана index.html и точка входа js/app.js",
+    "deps": [
+      "setup"
+    ]
+  },
+  {
+    "key": "styles",
+    "file": "03-styles.md",
+    "title": "[justai] Kaitos 3/12: оформление — css/base.css и css/components.css",
+    "deps": [
+      "markup"
+    ]
+  },
+  {
+    "key": "fs",
+    "file": "04-fs.md",
+    "title": "[justai] Kaitos 4/12: виртуальная файловая система и помощники DOM",
+    "deps": [
+      "styles"
+    ]
+  },
+  {
+    "key": "editor",
+    "file": "05-editor.md",
+    "title": "[justai] Kaitos 5/12: редактор кода — вкладки, нумерация строк, сохранение",
+    "deps": [
+      "fs"
+    ]
+  },
+  {
+    "key": "tree",
+    "file": "06-tree.md",
+    "title": "[justai] Kaitos 6/12: дерево файлов в левой панели",
+    "deps": [
+      "editor"
+    ]
+  },
+  {
+    "key": "chat",
+    "file": "07-chat.md",
+    "title": "[justai] Kaitos 7/12: панель ассистента (демо-ответы без модели)",
+    "deps": [
+      "tree"
+    ]
+  },
+  {
+    "key": "terminal",
+    "file": "08-terminal.md",
+    "title": "[justai] Kaitos 8/12: встроенный терминал",
+    "deps": [
+      "chat"
+    ]
+  },
+  {
+    "key": "settings",
+    "file": "09-settings.md",
+    "title": "[justai] Kaitos 9/12: настройки — провайдер, модель, ключ, тема, шрифт",
+    "deps": [
+      "terminal"
+    ]
+  },
+  {
+    "key": "palette",
+    "file": "10-palette.md",
+    "title": "[justai] Kaitos 10/12: палитра команд (Ctrl+K)",
+    "deps": [
+      "settings"
+    ]
+  },
+  {
+    "key": "e2e",
+    "file": "11-e2e.md",
+    "title": "[justai] Kaitos 11/12: постоянные сценарии проверки tests/e2e",
+    "deps": [
+      "palette"
+    ]
+  },
+  {
+    "key": "docs",
+    "file": "12-docs.md",
+    "title": "[justai] Kaitos 12/12: сценарий палитры и описание архитектуры",
+    "deps": [
+      "e2e"
+    ]
+  }
+]
