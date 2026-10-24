@@ -43,7 +43,6 @@
 ````
 node_modules/
 dist/
-.justai/
 .DS_Store
 *.log
 ````

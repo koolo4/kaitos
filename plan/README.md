@@ -17,20 +17,20 @@ python3 plan/create_issues.py
 
 ## Задачи
 
-| # | Задача | Файлы | Зависит от |
+| Issue | Задача | Файлы | Зависит от |
 |---|---|---|---|
-| 1 | Каркас проекта: package.json, justai.app.json, .gitignore, README | 4 файла | — |
-| 2 | Разметка экрана и точка входа | `index.html`, `js/app.js` | #1 |
-| 3 | Оформление: тёмная и светлая темы | `css/base.css`, `css/components.css` | #2 |
-| 4 | Виртуальная файловая система + помощники DOM | `js/dom.js`, `js/fs.js`, `js/app.js` | #3 |
-| 5 | Редактор кода: вкладки, нумерация, сохранение | `js/editor.js`, `js/app.js` | #4 |
-| 6 | Дерево файлов | `js/tree.js`, `js/app.js` | #5 |
-| 7 | Чат с ассистентом (демо-ответы) | `js/chat.js`, `js/app.js` | #6 |
-| 8 | Терминал | `js/terminal.js`, `js/app.js` | #7 |
-| 9 | Настройки: провайдер, модель, тема, шрифт | `js/settings.js`, `js/app.js` | #8 |
-| 10 | Палитра команд Ctrl+K | `js/palette.js`, `js/app.js` | #9 |
-| 11 | Постоянные сценарии `tests/e2e/*.yml` | 2 сценария | #10 |
-| 12 | Сценарий палитры + архитектура | `tests/e2e/palette.yml`, `docs/ARCHITECTURE.md` | #11 |
+| #5 | Каркас проекта: package.json, justai.app.json, .gitignore, README | 4 файла | — |
+| #6 | Разметка экрана и точка входа | `index.html`, `js/app.js` | #5 |
+| #7 | Оформление: тёмная и светлая темы | `css/base.css`, `css/components.css` | #6 |
+| #8 | Виртуальная файловая система + помощники DOM | `js/dom.js`, `js/fs.js`, `js/app.js` | #7 |
+| #9 | Редактор кода: вкладки, нумерация, сохранение | `js/editor.js`, `js/app.js` | #8 |
+| #10 | Дерево файлов | `js/tree.js`, `js/app.js` | #9 |
+| #11 | Чат с ассистентом (демо-ответы) | `js/chat.js`, `js/app.js` | #10 |
+| #12 | Терминал | `js/terminal.js`, `js/app.js` | #11 |
+| #13 | Настройки: провайдер, модель, тема, шрифт | `js/settings.js`, `js/app.js` | #12 |
+| #14 | Палитра команд Ctrl+K | `js/palette.js`, `js/app.js` | #13 |
+| #15 | Постоянные сценарии `tests/e2e/*.yml` | 2 сценария | #14 |
+| #16 | Сценарий палитры + архитектура | `tests/e2e/palette.yml`, `docs/ARCHITECTURE.md` | #15 |
 
 Задачи идут цепочкой: `js/app.js` (точка входа) растёт с каждой задачей, поэтому параллельно их ставить нельзя.
 
