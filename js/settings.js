@@ -13,6 +13,8 @@ export const DEFAULT_SETTINGS = {
   fontSize: 13,
   temperature: 0.2,
   maxTokens: 2048,
+  serverUrl: '/api',
+  serverToken: '',
 };
 
 export function loadSettings() {
@@ -59,6 +61,8 @@ export function initSettings(ctx) {
     fontSize: $('#settings-fontsize'),
     temperature: $('#settings-temperature'),
     maxTokens: $('#settings-maxtokens'),
+    serverUrl: $('#settings-serverurl'),
+    serverToken: $('#settings-servertoken'),
   };
   const testButton = $('#settings-test');
   const testResult = $('#settings-test-result');
@@ -70,6 +74,8 @@ export function initSettings(ctx) {
     fields.apiKey.value = settings.apiKey;
     fields.theme.value = settings.theme;
     fields.fontSize.value = String(settings.fontSize);
+    if (fields.serverUrl) fields.serverUrl.value = settings.serverUrl || '/api';
+    if (fields.serverToken) fields.serverToken.value = settings.serverToken || '';
     if (fields.temperature) fields.temperature.value = String(settings.temperature);
     if (fields.maxTokens) fields.maxTokens.value = String(settings.maxTokens);
     if (testResult) testResult.textContent = '';
@@ -85,6 +91,8 @@ export function initSettings(ctx) {
       fontSize: Number(fields.fontSize.value) || 13,
       temperature: fields.temperature ? Number(fields.temperature.value) : 0.2,
       maxTokens: fields.maxTokens ? Number(fields.maxTokens.value) || 2048 : 2048,
+      serverUrl: fields.serverUrl ? fields.serverUrl.value.trim() || '/api' : '/api',
+      serverToken: fields.serverToken ? fields.serverToken.value.trim() : '',
     };
   }
 
@@ -137,7 +145,7 @@ export function initSettings(ctx) {
   fields.provider.addEventListener('change', () => {
     const provider = fields.provider.value;
     const defaults = {
-      ollama: { baseUrl: 'http://localhost:11434', model: 'qwen2.5-coder:7b' },
+      ollama: { baseUrl: 'http://localhost:11434', model: 'qwen3.5:9b' },
       openai: { baseUrl: 'https://api.openai.com', model: 'gpt-4o-mini' },
       none: { baseUrl: '', model: '' },
     }[provider];

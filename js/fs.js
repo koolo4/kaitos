@@ -58,6 +58,16 @@ export function createFs(initial = SEED_FILES) {
     return Array.from(files.keys()).sort((a, b) => a.localeCompare(b));
   }
 
+  /* Заменяет всё содержимое (используется при загрузке проекта с сервера). */
+  function load(source = {}) {
+    files.clear();
+    const entries = Array.isArray(source) ? source : Object.entries(source || {});
+    for (const entry of entries) {
+      if (Array.isArray(entry)) files.set(normalize(entry[0]), String(entry[1] ?? ''));
+    }
+    return files.size;
+  }
+
   function listDir(dir = '') {
     const base = normalize(dir);
     const prefix = base ? `${base}/` : '';
@@ -115,6 +125,7 @@ export function createFs(initial = SEED_FILES) {
     write,
     create,
     remove,
+    load,
     list,
     listDir,
     tree,

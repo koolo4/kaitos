@@ -98,6 +98,7 @@
       <span id="status-file" class="status-item">файл не открыт</span>
       <span id="status-position" class="status-item">Стр 1, Кол 1</span>
       <span id="status-dirty" class="status-item"></span>
+      <span id="status-storage" class="status-item" title="Источник файлов">демо (в памяти)</span>
       <span class="status-spacer"></span>
       <span id="status-model" class="status-item">модель: —</span>
       <span id="status-clock" class="status-item">--:--</span>
@@ -150,6 +151,14 @@
         <label class="field">
           <span class="field__label">Размер шрифта кода</span>
           <input id="settings-fontsize" class="input" type="number" min="11" max="22" step="1" />
+        </label>
+        <label class="field">
+          <span class="field__label">Адрес сервера файлов</span>
+          <input id="settings-serverurl" class="input" placeholder="/api" />
+        </label>
+        <label class="field">
+          <span class="field__label">Токен сервера файлов (если задан)</span>
+          <input id="settings-servertoken" class="input" type="password" placeholder="пусто — без токена" />
         </label>
         <div class="field">
           <button id="settings-test" class="btn-ghost field__button" type="button">Проверить соединение</button>

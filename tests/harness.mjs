@@ -24,7 +24,7 @@ export function appHtml() {
     .replace('<script type="module" src="js/app.js"></script>', '');
 }
 
-export async function bootApp(settings = {}) {
+export async function bootApp(settings = {}, options = {}) {
   const [code, html] = [await bundleApp(), appHtml()];
   const dom = new JSDOM(html, { url: 'http://localhost:5173/', runScripts: 'outside-only', pretendToBeVisual: true });
   const { window } = dom;
@@ -37,8 +37,26 @@ export async function bootApp(settings = {}) {
   if (Object.keys(settings).length) {
     window.localStorage.setItem('kaitos.settings.v1', JSON.stringify(settings));
   }
+  if (options.fetchMock) window.fetch = options.fetchMock;
   window.eval(code);
-  return { window, doc: window.document, errors, K: window.Kaitos };
+  const K = window.Kaitos;
+  // boot асинхронный: ждём события готовности (проверка локального сервера файлов)
+  await new Promise((resolve) => {
+    if (K && K.ready) {
+      resolve();
+      return;
+    }
+    let settled = false;
+    const done = () => {
+      if (!settled) {
+        settled = true;
+        resolve();
+      }
+    };
+    window.addEventListener('kaitos:ready', done, { once: true });
+    setTimeout(done, 1500);
+  });
+  return { window, doc: window.document, errors, K };
 }
 
 export const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

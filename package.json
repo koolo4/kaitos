@@ -8,7 +8,10 @@
     "dev": "vite --port 5173 --strictPort",
     "build": "vite build",
     "preview": "vite preview --port 5173 --strictPort",
-    "test": "node tests/run.mjs"
+    "test": "node tests/run.mjs",
+    "server": "node server/index.js",
+    "dev:full": "node scripts/dev-all.mjs",
+    "test:live": "node tests/live.mjs"
   },
   "devDependencies": {
     "vite": "^5.4.10",

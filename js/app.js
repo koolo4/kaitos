@@ -13,6 +13,8 @@ import { initTerminal } from './terminal.js';
 import { initSettings, loadSettings, saveSettings, applySettings } from './settings.js';
 import { initPalette } from './palette.js';
 import { createLlm } from './llm.js';
+import { createApi } from './api.js';
+import { createRemoteFs } from './fs-remote.js';
 
 const VERSION = '0.1.0';
 
@@ -50,8 +52,45 @@ function startClock() {
   window.setInterval(tick, 1000);
 }
 
-function boot() {
+/* Пробует подключиться к локальному серверу файлов; при неудаче остаётся демо-режим. */
+async function connectStorage() {
+  const baseUrl = ctx.settings.serverUrl || '/api';
+  const api = createApi({ baseUrl, token: ctx.settings.serverToken || '' });
+  ctx.api = api;
+
+  if (typeof fetch !== 'function') return { mode: 'demo', reason: 'нет fetch' };
+
+  try {
+    const health = await api.health();
+    const remote = createRemoteFs({ api, name: health.root || 'project' });
+    const stats = await remote.load();
+    ctx.fs = remote;
+    return { mode: 'disk', name: remote.name(), files: stats.files, skipped: stats.skipped };
+  } catch (error) {
+    return { mode: 'demo', reason: error.message };
+  }
+}
+
+function showStorage(state) {
+  const chip = $('#status-storage');
+  if (chip) {
+    if (state.mode === 'disk') {
+      chip.textContent = `диск: ${state.name}${state.skipped ? ` (${state.files} файлов)` : ''}`;
+      chip.title = 'Файлы читаются с диска через локальный сервер';
+      chip.classList.add('status-item--ok');
+    } else {
+      chip.textContent = 'демо (в памяти)';
+      chip.title = `Локальный сервер не подключён: ${state.reason || ''}. Запустите npm run server`;
+      chip.classList.remove('status-item--ok');
+    }
+  }
+  if (state.mode === 'disk' && ctx.editor && ctx.editor.renderHighlight) ctx.editor.renderHighlight();
+}
+
+async function boot() {
   applySettings(ctx.settings);
+
+  const storage = await connectStorage();
 
   ctx.llm = createLlm(ctx);
   ctx.editor = initEditor(ctx);
@@ -85,8 +124,18 @@ function boot() {
 
   startClock();
 
+  $('#project-name').textContent = ctx.fs.name();
+  if (ctx.tree) ctx.tree.render();
+  showStorage(storage);
+  if (storage.mode === 'disk' && ctx.terminal) {
+    ctx.terminal.print(`Проект с диска: ${storage.name}, файлов ${storage.files}`, 'ok');
+  }
+
   ctx.ready = true;
+  ctx.storage = storage;
   window.Kaitos = ctx;
+  window.dispatchEvent(new window.CustomEvent('kaitos:ready', { detail: storage }));
 }
 
+window.Kaitos = ctx;
 boot();
