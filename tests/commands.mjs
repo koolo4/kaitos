@@ -14,11 +14,20 @@ writeFileSync(join(root, 'marker.txt'), 'я здесь\n', 'utf8');
 const runner = createRunner({ root });
 
 await check('простая команда выполняется в папке проекта', async () => {
-  const data = await runner.run('ls');
+  // команда Node, а не ls: набор должен проходить и на Windows, и на Linux
+  const data = await runner.run('node -e "console.log(process.cwd())"');
+  if (data.code !== 0) throw new Error(`код ${data.code}: ${data.output}`);
+  if (!data.output.includes('kaitos-run-')) throw new Error(`не тот каталог: ${data.output}`);
+  if (data.timedOut) throw new Error('таймаут');
+  return data.output.trim().split(/[\\/]/).pop();
+});
+
+await check('команда видит файлы проекта', async () => {
+  const code = "console.log(require('fs').readdirSync('.').join(','))";
+  const data = await runner.run(`node -e "${code}"`);
   if (data.code !== 0) throw new Error(`код ${data.code}: ${data.output}`);
   if (!data.output.includes('marker.txt')) throw new Error(`вывод: ${data.output}`);
-  if (data.timedOut) throw new Error('таймаут');
-  return data.output.trim();
+  return 'marker.txt на месте';
 });
 
 await check('код выхода возвращается', async () => {
