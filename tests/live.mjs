@@ -6,6 +6,13 @@
 import { bootApp, reporter } from './harness.mjs';
 
 const APP = process.env.KAITOS_APP || 'http://localhost:5173';
+
+// Набор недетерминирован: нужен запущенный сервер файлов. В общий прогон включается по флагу,
+// иначе — только при явном запуске `npm run test:live`.
+if (!process.env.KAITOS_LIVE && process.env.npm_lifecycle_event !== 'test:live') {
+  console.log('\n⏭  живой набор: запустите npm run test:live при работающих npm run server и npm run dev');
+  process.exit(0);
+}
 const { check, result } = reporter('Живой сервер');
 
 async function serverUp() {
