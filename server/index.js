@@ -98,8 +98,23 @@ export function createServer({ root = ROOT, token = TOKEN, watchFiles = true, al
 
     try {
       if (req.method === 'GET' && url.pathname === '/api/health') {
-        const list = await files.list();
-        send(res, 200, { ok: true, root: files.root, files: list.length, version: 1 });
+        /*
+         * health — это проверка связи, а не инспекция проекта: он отвечает 200 всегда,
+         * даже если обход файлов споткнулся. Иначе приложение уходит в демо-режим из-за
+         * одного недоступного каталога.
+         */
+        try {
+          const list = await files.list();
+          send(res, 200, { ok: true, root: files.root, files: list.length, version: 1 });
+        } catch (error) {
+          send(res, 200, {
+            ok: true,
+            root: files.root,
+            files: 0,
+            version: 1,
+            warning: `Не удалось прочитать список файлов: ${error.message}`,
+          });
+        }
         return;
       }
 
