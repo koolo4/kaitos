@@ -6,6 +6,7 @@
 
 import http from 'node:http';
 import { createFileService } from './files.js';
+import { createGit } from './git.js';
 import { createWatcher } from './watch.js';
 import { PathError } from './paths.js';
 
@@ -63,6 +64,7 @@ function readBody(req) {
 
 export function createServer({ root = ROOT, token = TOKEN, watchFiles = true } = {}) {
   const files = createFileService(root);
+  const gitApi = createGit({ root });
   const watcher = watchFiles ? createWatcher({ root }).start() : null;
   const requiredToken = String(token || '');
 
@@ -113,6 +115,29 @@ export function createServer({ root = ROOT, token = TOKEN, watchFiles = true } =
       if (req.method === 'GET' && url.pathname === '/api/files') {
         const list = await files.list(url.searchParams.get('dir') || '.');
         send(res, 200, { ok: true, files: list });
+        return;
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/git/status') {
+        send(res, 200, await gitApi.status());
+        return;
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/git/diff') {
+        const path = url.searchParams.get('path');
+        if (path) files.guard.resolveInside(path); // проверка пути до вызова git
+        send(res, 200, await gitApi.diff(path || ''));
+        return;
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/git/log') {
+        send(res, 200, await gitApi.log(Number(url.searchParams.get('limit') || 10)));
+        return;
+      }
+
+      if (req.method === 'POST' && url.pathname === '/api/git/commit') {
+        const body = await readBody(req);
+        send(res, 200, await gitApi.commit(body.message));
         return;
       }
 

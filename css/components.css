@@ -480,3 +480,114 @@
 .edit-card--rejected { opacity: 0.65; }
 
 .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+/* --- панель git в боковой колонке --- */
+
+.git-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  max-height: 46%;
+  min-height: 0;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.git-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.git-summary {
+  flex: 1 1 auto;
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-changes {
+  flex: 0 1 auto;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.git-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 3px 10px;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.git-row:hover { background: var(--panel-2); }
+.git-row.is-active { background: var(--panel-3); }
+
+.git-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+
+.git-badge {
+  flex: 0 0 auto;
+  width: 15px;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  border-radius: 3px;
+}
+
+.git-badge--modified { color: #d29922; }
+.git-badge--added, .git-badge--untracked { color: var(--ok); }
+.git-badge--deleted { color: var(--err); }
+.git-badge--renamed, .git-badge--copied { color: #58a6ff; }
+.git-badge--conflict { color: var(--err); }
+
+.git-empty {
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.git-diff {
+  flex: 1 1 auto;
+  overflow: auto;
+  margin: 0 6px 4px;
+  padding: 4px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.git-diff-row { padding: 0 8px; white-space: pre; }
+.git-diff-row--add { background: rgba(63, 185, 80, 0.14); }
+.git-diff-row--del { background: rgba(248, 81, 73, 0.14); }
+.git-diff-row--hunk { color: var(--muted); }
+.git-diff-row--meta { color: var(--muted); }
+
+.git-commit {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  padding: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.git-commit .input { flex: 1 1 auto; padding: 4px 8px; font-size: 12px; }
