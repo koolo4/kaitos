@@ -3,7 +3,7 @@
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { reporter } from './harness.mjs';
+import { reporter } from './reporter.mjs';
 import { createPathGuard, toPosix, assertFileName } from '../server/paths.js';
 import { createFileService } from '../server/files.js';
 import { createServer } from '../server/index.js';

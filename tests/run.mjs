@@ -10,7 +10,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 /* --only-errors: печатать только провалившиеся проверки (для внешних логов, где виден лишь хвост). */
 const ONLY_ERRORS = process.argv.includes('--only-errors');
 const SUITES = readdirSync(HERE)
-  .filter((file) => file.endsWith('.mjs') && file !== 'run.mjs' && file !== 'harness.mjs')
+  .filter((file) => file.endsWith('.mjs') && !['run.mjs', 'harness.mjs', 'reporter.mjs'].includes(file))
   .sort();
 
 const failed = [];
