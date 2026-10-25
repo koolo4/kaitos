@@ -2,8 +2,10 @@
 
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { reporter } from './harness.mjs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawn } from 'node:child_process';
+import { reporter } from './reporter.mjs';
 import { createPathGuard, toPosix, assertFileName } from '../server/paths.js';
 import { createFileService } from '../server/files.js';
 import { createServer } from '../server/index.js';
@@ -215,6 +217,45 @@ await check('токен: без заголовка 401, с заголовком 
   if (noToken.status !== 401) throw new Error(`без токена: ${noToken.status}`);
   if (withToken.status !== 200) throw new Error(`с токеном: ${withToken.status}`);
   return true;
+});
+
+/*
+ * Ловит поломку «файл не считается главным»: на Windows в argv[1] обратные слэши,
+ * и проверка через endsWith('server/index.js') всегда ложна — сервер молча не стартует.
+ */
+await check('сервер запускается как отдельная программа', async () => {
+  const port = 5900 + Math.floor(Math.random() * 90);
+  const child = spawn(process.execPath, ['server/index.js'], {
+    cwd: join(dirname(fileURLToPath(import.meta.url)), '..'),
+    env: { ...process.env, KAITOS_PORT: String(port), KAITOS_ROOT: root },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let out = '';
+  child.stdout.on('data', (chunk) => {
+    out += chunk.toString('utf8');
+  });
+  child.stderr.on('data', (chunk) => {
+    out += chunk.toString('utf8');
+  });
+
+  // ждём приглашения в выводе, но не дольше 5 секунд
+  const started = Date.now();
+  while (!out.includes('Kaitos server:') && Date.now() - started < 5000) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  let answered = false;
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/health`);
+    answered = response.status === 200;
+  } catch (error) {
+    answered = false;
+  }
+
+  child.kill('SIGKILL');
+  if (!out.includes('Kaitos server:')) throw new Error(`сервер не запустился, вывод: ${JSON.stringify(out)}`);
+  if (!answered) throw new Error('сервер не ответил на /api/health');
+  return `запустился на ${port} и ответил`;
 });
 
 await new Promise((resolve) => server.close(resolve));
