@@ -12,6 +12,7 @@ import { initChat } from './chat.js';
 import { initTerminal } from './terminal.js';
 import { initSettings, loadSettings, saveSettings, applySettings } from './settings.js';
 import { initPalette } from './palette.js';
+import { initGit } from './git.js';
 import { createLlm } from './llm.js';
 import { createApi } from './api.js';
 import { createRemoteFs } from './fs-remote.js';
@@ -121,6 +122,7 @@ async function boot() {
   ctx.terminal = initTerminal(ctx);
   ctx.settingsApi = initSettings(ctx);
   ctx.palette = initPalette(ctx);
+  ctx.git = initGit(ctx);
 
   ctx.updateSettings = updateSettings;
   ctx.toggleSidebar = toggleSidebar;
@@ -157,6 +159,7 @@ async function boot() {
 
   ctx.ready = true;
   ctx.storage = storage;
+  if (ctx.git) ctx.git.refresh();
   window.Kaitos = ctx;
   window.dispatchEvent(new window.CustomEvent('kaitos:ready', { detail: storage }));
 }

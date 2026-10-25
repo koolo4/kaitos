@@ -1,0 +1,25 @@
+name: Git-панель показывает изменения проекта
+steps:
+  - open: /
+  - wait: 900
+  - expectVisible: "#git-panel"
+  - expectVisible: "#git-summary"
+  - expectVisible: "#git-message"
+  - click:
+      selector: "#btn-git-refresh"
+  - wait: 700
+  - expectText:
+      selector: "#git-summary"
+      contains: "·"
+  - expectVisible: "#btn-git-commit"
+  - screenshot: git-panel
+  - viewport:
+      width: 375
+      height: 812
+  - wait: 300
+  - expectVisible: "#git-panel"
+  - screenshot: git-mobile
+  - viewport:
+      width: 1280
+      height: 800
+  - expectNoConsoleErrors: true
