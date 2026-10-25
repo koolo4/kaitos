@@ -7,7 +7,8 @@ AI-редактор кода в браузере — аналог Cursor / Claud
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
+npm run dev      # http://localhost:5173 (dev-сервер Vite)
+# если приложение за https-прокси и нужен HMR: KAITOS_HMR_WSS=1 npm run dev
 npm test         # 49 сквозных проверок в jsdom
 npm run build    # сборка в dist/
 ```
