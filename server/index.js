@@ -7,6 +7,7 @@
 import http from 'node:http';
 import { createFileService } from './files.js';
 import { createGit } from './git.js';
+import { createRunner } from './run.js';
 import { createWatcher } from './watch.js';
 import { PathError } from './paths.js';
 
@@ -62,9 +63,10 @@ function readBody(req) {
   });
 }
 
-export function createServer({ root = ROOT, token = TOKEN, watchFiles = true } = {}) {
+export function createServer({ root = ROOT, token = TOKEN, watchFiles = true, allowRun = true } = {}) {
   const files = createFileService(root);
   const gitApi = createGit({ root });
+  const runner = allowRun ? createRunner({ root }) : null;
   const watcher = watchFiles ? createWatcher({ root }).start() : null;
   const requiredToken = String(token || '');
 
@@ -115,6 +117,21 @@ export function createServer({ root = ROOT, token = TOKEN, watchFiles = true } =
       if (req.method === 'GET' && url.pathname === '/api/files') {
         const list = await files.list(url.searchParams.get('dir') || '.');
         send(res, 200, { ok: true, files: list });
+        return;
+      }
+
+      if (req.method === 'POST' && url.pathname === '/api/run') {
+        if (!runner) {
+          fail(res, 400, 'Запуск команд выключен (allowRun: false)');
+          return;
+        }
+        const body = await readBody(req);
+        if (typeof body.command !== 'string' || !body.command.trim()) {
+          fail(res, 400, 'Нужно поле command (непустая строка)');
+          return;
+        }
+        const result = await runner.run(body.command);
+        send(res, 200, result);
         return;
       }
 
