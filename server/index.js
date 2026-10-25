@@ -5,6 +5,8 @@
  */
 
 import http from 'node:http';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createFileService } from './files.js';
 import { createGit } from './git.js';
 import { createRunner } from './run.js';
@@ -225,13 +227,24 @@ export function createServer({ root = ROOT, token = TOKEN, watchFiles = true, al
   return server;
 }
 
-/* Запуск из командной строки. */
-const isMain = process.argv[1] && process.argv[1].endsWith('server/index.js');
+/*
+ * Запуск из командной строки.
+ * Сравниваем абсолютные пути: на Windows в argv[1] обратные слэши, и проверка
+ * `endsWith('server/index.js')` там всегда ложна — сервер молча не стартовал.
+ */
+const isMain = Boolean(process.argv[1]) && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
 if (isMain) {
   const server = createServer();
+  server.on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+      console.error(`Порт ${PORT} занят: возможно, сервер уже запущен. Другой порт: KAITOS_PORT=5179 npm run server`);
+      process.exit(1);
+    }
+    throw error;
+  });
   server.listen(PORT, HOST, () => {
-    console.log(`Kaitos server: http://${HOST}:${PORT}`);
+    console.log(`Kaitos server: http://${HOST}:${server.address().port}`);
     console.log(`Проект:       ${ROOT}`);
     console.log(`Токен:        ${TOKEN ? 'задан через KAITOS_TOKEN' : 'не требуется (только локально)'}`);
     console.log('Слежение:     включено (правки других программ подхватываются)');
