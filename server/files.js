@@ -5,6 +5,7 @@
 
 import { promises as fs } from 'node:fs';
 import { createPathGuard, toPosix, assertFileName, PathError } from './paths.js';
+import { dirname } from 'node:path';
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024; // 2 МБ на файл
 const SKIP_DIRS = new Set(['.git', '.justai', 'node_modules', 'dist', '.vite']);
@@ -86,8 +87,8 @@ export function createFileService(root) {
     if (Buffer.byteLength(text, 'utf8') > MAX_FILE_BYTES) throw new PathError('Содержимое больше 2 МБ');
     const existing = await stat(target.relative);
     if (existing && existing.type === 'dir') throw new PathError(`Это папка: ${target.relative}`);
-    const slash = target.absolute.lastIndexOf('/');
-    if (slash > 0) await fs.mkdir(target.absolute.slice(0, slash), { recursive: true });
+    // dirname, а не поиск '/': на Windows в пути обратные слэши
+    await fs.mkdir(dirname(target.absolute), { recursive: true });
     await fs.writeFile(target.absolute, text, 'utf8');
     return { path: target.relative, created: !existing, size: Buffer.byteLength(text, 'utf8') };
   }

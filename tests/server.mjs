@@ -30,7 +30,9 @@ await check('защита путей блокирует выход за прое
     if (!blocked) throw new Error(`пропущен путь ${path}`);
   }
   const ok = guard.resolveInside('src/main.js');
-  if (!ok.absolute.endsWith('src/main.js')) throw new Error('нормальный путь не разрешён');
+  if (toPosix(ok.absolute) !== 'src/main.js' && !toPosix(ok.absolute).endsWith('/src/main.js')) {
+    throw new Error(`нормальный путь не разрешён: ${ok.absolute}`);
+  }
   return `${bad.length} путей заблокировано`;
 });
 
