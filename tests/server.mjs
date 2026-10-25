@@ -106,7 +106,9 @@ await check('stat и отсутствующий файл', async () => {
 
 /* --- HTTP API --- */
 
-const server = createServer({ root });
+// watchFiles: false — слежение проверяется отдельным набором; на Windows рекурсивный
+// наблюдатель иногда роняет процесс при закрытии.
+const server = createServer({ root, watchFiles: false });
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const { port } = server.address();
 const base = `http://127.0.0.1:${port}/api`;
@@ -202,7 +204,7 @@ await check('API отвечает понятной ошибкой на плох�
 });
 
 await check('токен: без заголовка 401, с заголовком 200', async () => {
-  const guarded = createServer({ root, token: 'secret-token' });
+  const guarded = createServer({ root, token: 'secret-token', watchFiles: false });
   await new Promise((resolve) => guarded.listen(0, '127.0.0.1', resolve));
   const guardedPort = guarded.address().port;
   const noToken = await fetch(`http://127.0.0.1:${guardedPort}/api/health`);
