@@ -82,23 +82,73 @@
   user-select: none;
 }
 
+.editor-code {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.editor-highlight,
 .editor-input {
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  inset: 0;
   margin: 0;
   padding: 8px 14px 40px 12px;
   overflow: auto;
   border: none;
   outline: none;
-  resize: none;
   background: transparent;
-  color: var(--text);
   font-family: var(--font-code);
   font-size: var(--code-size);
   line-height: var(--line-h);
   tab-size: 2;
   white-space: pre;
 }
+
+/* Текст textarea прозрачный: видно подсвеченный слой под ним, каретка остаётся видимой. */
+.editor-highlight {
+  z-index: 0;
+  color: var(--text);
+  pointer-events: none;
+}
+
+.editor-input {
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  resize: none;
+  color: transparent;
+  caret-color: var(--text);
+}
+
+.editor-input::placeholder { color: var(--muted); }
+.editor-input::selection { background: var(--accent-soft); }
+
+/* Цвета подсветки синтаксиса */
+.tok-keyword { color: #c792ea; }
+.tok-string { color: #c3e88d; }
+.tok-comment { color: #6b7a90; font-style: italic; }
+.tok-number { color: #f78c6c; }
+.tok-fn { color: #82aaff; }
+.tok-prop { color: #ffcb6b; }
+.tok-selector { color: #ffcb6b; }
+.tok-value { color: #c3e88d; }
+.tok-tag { color: #f07178; }
+.tok-attr { color: #ffcb6b; }
+.tok-punct { color: #89ddff; }
+
+[data-theme="light"] .tok-keyword { color: #8b2fb8; }
+[data-theme="light"] .tok-string { color: #1a7f37; }
+[data-theme="light"] .tok-comment { color: #6a737d; }
+[data-theme="light"] .tok-number { color: #b5560d; }
+[data-theme="light"] .tok-fn { color: #1d4ed8; }
+[data-theme="light"] .tok-prop { color: #8a6100; }
+[data-theme="light"] .tok-selector { color: #8a6100; }
+[data-theme="light"] .tok-value { color: #1a7f37; }
+[data-theme="light"] .tok-tag { color: #b0231c; }
+[data-theme="light"] .tok-attr { color: #8a6100; }
+[data-theme="light"] .tok-punct { color: #0b6e8f; }
 
 /* Терминал */
 

@@ -22,6 +22,39 @@ await check('открытие файла из дерева', () => {
 
 await check('вкладка активна и одна', () => $$('.tab.is-active').length === 1);
 await check('нумерация строк', () => $('#line-numbers').textContent.split('\n').length);
+
+await check('подсветка синтаксиса в редакторе', () => {
+  const layer = $('#editor-highlight');
+  if (!layer) throw new Error('нет слоя подсветки');
+  const html = layer.innerHTML;
+  if (!html.includes('tok-keyword')) throw new Error('нет ключевых слов');
+  if (!html.includes('tok-string')) throw new Error('нет строк');
+  if (!html.includes('tok-fn')) throw new Error('нет имён функций');
+  if (html.includes('<script')) throw new Error('HTML не экранирован');
+  return `${(html.match(/tok-/g) || []).length} подсветок`;
+});
+
+await check('подсветка обновляется при вводе', () => {
+  const layer = $('#editor-highlight');
+  const before = layer.innerHTML.length;
+  const input = $('#editor-input');
+  input.value += '\n// новый комментарий\nconst added = 1;\n';
+  input.dispatchEvent(new window.Event('input', { bubbles: true }));
+  const html = layer.innerHTML;
+  if (!html.includes('новый комментарий')) throw new Error('текст не попал в слой');
+  if (!html.includes('tok-comment')) throw new Error('комментарий не подсвечен');
+  if (html.length <= before) throw new Error('слой не вырос');
+  return true;
+});
+
+await check('подсветка переключается на язык другого файла', () => {
+  click(window, Array.from($$('.tree-row')).find((row) => row.dataset.path === 'styles/theme.css'));
+  const html = $('#editor-highlight').innerHTML;
+  if (!html.includes('tok-selector')) throw new Error('css-селекторы не подсвечены');
+  if (!html.includes('tok-prop')) throw new Error('css-свойства не подсвечены');
+  click(window, Array.from($$('.tree-row')).find((row) => row.dataset.path === 'src/utils.js'));
+  return 'css → js';
+});
 await check('чип контекста в чате', () => $('#chat-context').textContent === 'src/utils.js');
 
 await check('правка файла помечается как несохранённая', () => {
