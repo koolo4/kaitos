@@ -3,10 +3,25 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { build } from 'esbuild';
-import { JSDOM } from 'jsdom';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+/* Без зависимостей тесты не соберутся: объясняем это, а не падаем стеком вызовов. */
+let build;
+let JSDOM;
+try {
+  ({ build } = await import('esbuild'));
+  ({ JSDOM } = await import('jsdom'));
+} catch (error) {
+  const missing = String(error && error.message).match(/Cannot find package '([^']+)'/);
+  const name = missing ? missing[1] : 'esbuild/jsdom';
+  console.error(
+    `\n[тесты] не установлен пакет «${name}».\n` +
+      'Выполните npm install в папке проекта и повторите.\n' +
+      'Если идёт проверка через JustAI, окружение задачи должно содержать node_modules.',
+  );
+  process.exit(1);
+}
 
 export async function bundleApp() {
   const result = await build({
