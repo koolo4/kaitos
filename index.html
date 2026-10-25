@@ -76,12 +76,16 @@
           <button class="chip chip-btn" type="button" data-prompt="Объясни этот файл">Объясни файл</button>
           <button class="chip chip-btn" type="button" data-prompt="Найди ошибки в коде">Найди ошибки</button>
           <button class="chip chip-btn" type="button" data-prompt="Добавь комментарии к коду">Комментарии</button>
+          <button class="chip chip-btn" type="button" data-prompt="Предложи улучшение этого файла и покажи правку целиком">Предложи правку</button>
         </div>
         <form id="chat-form" class="chat-form">
           <textarea id="chat-input" class="chat-input" rows="3" placeholder="Спросите о коде…"></textarea>
           <div class="chat-actions">
-            <span class="muted small">Enter — отправить</span>
-            <button id="chat-send" class="btn-primary" type="submit">Отправить</button>
+            <span class="muted small">Enter — отправить, Shift+Enter — новая строка</span>
+            <div class="chat-actions__buttons">
+              <button id="chat-stop" class="btn-ghost" type="button" hidden>Остановить</button>
+              <button id="chat-send" class="btn-primary" type="submit">Отправить</button>
+            </div>
           </div>
         </form>
       </aside>
@@ -133,9 +137,21 @@
           </select>
         </label>
         <label class="field">
+          <span class="field__label">Температура (0 — строго, 1 — фантазия)</span>
+          <input id="settings-temperature" class="input" type="number" min="0" max="2" step="0.1" />
+        </label>
+        <label class="field">
+          <span class="field__label">Предел длины ответа, токенов</span>
+          <input id="settings-maxtokens" class="input" type="number" min="128" max="32000" step="128" />
+        </label>
+        <label class="field">
           <span class="field__label">Размер шрифта кода</span>
           <input id="settings-fontsize" class="input" type="number" min="11" max="22" step="1" />
         </label>
+        <div class="field">
+          <button id="settings-test" class="btn-ghost field__button" type="button">Проверить соединение</button>
+          <span id="settings-test-result" class="settings-test"></span>
+        </div>
       </div>
       <div class="modal__foot">
         <button class="btn-ghost" data-close="settings" type="button">Отмена</button>

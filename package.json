@@ -7,9 +7,11 @@
   "scripts": {
     "dev": "vite --port 5173 --strictPort",
     "build": "vite build",
-    "preview": "vite preview --port 5173 --strictPort"
+    "preview": "vite preview --port 5173 --strictPort",
+    "test": "node tests/run.mjs"
   },
   "devDependencies": {
-    "vite": "^5.4.10"
+    "vite": "^5.4.10",
+    "jsdom": "^25.0.1"
   }
 }

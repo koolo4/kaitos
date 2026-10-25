@@ -12,6 +12,7 @@ import { initChat } from './chat.js';
 import { initTerminal } from './terminal.js';
 import { initSettings, loadSettings, saveSettings, applySettings } from './settings.js';
 import { initPalette } from './palette.js';
+import { createLlm } from './llm.js';
 
 const VERSION = '0.1.0';
 
@@ -52,6 +53,7 @@ function startClock() {
 function boot() {
   applySettings(ctx.settings);
 
+  ctx.llm = createLlm(ctx);
   ctx.editor = initEditor(ctx);
   ctx.tree = initTree(ctx);
   ctx.chat = initChat(ctx);
