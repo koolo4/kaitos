@@ -1,4 +1,4 @@
-/* Настройки: провайдер модели, тема, размер шрифта. Хранятся в localStorage браузера. */
+/* Настройки: провайдер модели, генерация, тема, шрифт. Хранятся в localStorage браузера. */
 
 import { $ } from './dom.js';
 
@@ -11,6 +11,8 @@ export const DEFAULT_SETTINGS = {
   apiKey: '',
   theme: 'dark',
   fontSize: 13,
+  temperature: 0.2,
+  maxTokens: 2048,
 };
 
 export function loadSettings() {
@@ -36,7 +38,11 @@ export function applySettings(settings) {
   document.documentElement.style.setProperty('--code-size', `${Number(settings.fontSize) || 13}px`);
 
   const chip = $('#model-chip');
-  if (chip) chip.textContent = settings.model ? settings.model : 'модель не выбрана';
+  if (chip) {
+    chip.textContent = settings.model
+      ? `${settings.provider === 'ollama' ? 'Ollama' : settings.provider === 'openai' ? 'API' : 'демо'} · ${settings.model}`
+      : 'демо-режим';
+  }
 
   const status = $('#status-model');
   if (status) status.textContent = settings.model ? `модель: ${settings.model}` : 'модель: —';
@@ -51,7 +57,11 @@ export function initSettings(ctx) {
     apiKey: $('#settings-apikey'),
     theme: $('#settings-theme'),
     fontSize: $('#settings-fontsize'),
+    temperature: $('#settings-temperature'),
+    maxTokens: $('#settings-maxtokens'),
   };
+  const testButton = $('#settings-test');
+  const testResult = $('#settings-test-result');
 
   function fill(settings) {
     fields.provider.value = settings.provider;
@@ -60,6 +70,22 @@ export function initSettings(ctx) {
     fields.apiKey.value = settings.apiKey;
     fields.theme.value = settings.theme;
     fields.fontSize.value = String(settings.fontSize);
+    if (fields.temperature) fields.temperature.value = String(settings.temperature);
+    if (fields.maxTokens) fields.maxTokens.value = String(settings.maxTokens);
+    if (testResult) testResult.textContent = '';
+  }
+
+  function collect() {
+    return {
+      provider: fields.provider.value,
+      model: fields.model.value.trim(),
+      baseUrl: fields.baseUrl.value.trim(),
+      apiKey: fields.apiKey.value,
+      theme: fields.theme.value,
+      fontSize: Number(fields.fontSize.value) || 13,
+      temperature: fields.temperature ? Number(fields.temperature.value) : 0.2,
+      maxTokens: fields.maxTokens ? Number(fields.maxTokens.value) || 2048 : 2048,
+    };
   }
 
   function open() {
@@ -73,15 +99,30 @@ export function initSettings(ctx) {
   }
 
   function save() {
-    ctx.updateSettings({
-      provider: fields.provider.value,
-      model: fields.model.value.trim(),
-      baseUrl: fields.baseUrl.value.trim(),
-      apiKey: fields.apiKey.value,
-      theme: fields.theme.value,
-      fontSize: Number(fields.fontSize.value) || 13,
-    });
+    ctx.updateSettings(collect());
     close();
+  }
+
+  /* Проверка соединения без сохранения: настройки берём из формы. */
+  async function test() {
+    if (!testButton || !testResult) return;
+    const draft = collect();
+    const previous = ctx.settings;
+    ctx.settings = { ...ctx.settings, ...draft };
+    testButton.disabled = true;
+    testResult.textContent = 'Проверяю…';
+    testResult.className = 'settings-test';
+    try {
+      const result = await ctx.llm.test();
+      testResult.textContent = `✓ ${result.provider}, ${result.model}: ${result.text}`;
+      testResult.classList.add('settings-test--ok');
+    } catch (error) {
+      testResult.textContent = `✕ ${error.message}`;
+      testResult.classList.add('settings-test--err');
+    } finally {
+      ctx.settings = previous;
+      testButton.disabled = false;
+    }
   }
 
   modal.addEventListener('click', (event) => {
@@ -90,6 +131,26 @@ export function initSettings(ctx) {
 
   $('#settings-save').addEventListener('click', save);
   $('#btn-settings').addEventListener('click', open);
+  if (testButton) testButton.addEventListener('click', test);
+
+  /* Подставляем адрес и модель по умолчанию при смене провайдера. */
+  fields.provider.addEventListener('change', () => {
+    const provider = fields.provider.value;
+    const defaults = {
+      ollama: { baseUrl: 'http://localhost:11434', model: 'qwen2.5-coder:7b' },
+      openai: { baseUrl: 'https://api.openai.com', model: 'gpt-4o-mini' },
+      none: { baseUrl: '', model: '' },
+    }[provider];
+    if (!defaults) return;
+    if (!fields.baseUrl.value.trim() || fields.baseUrl.dataset.auto === '1') {
+      fields.baseUrl.value = defaults.baseUrl;
+      fields.baseUrl.dataset.auto = '1';
+    }
+    if (!fields.model.value.trim() || fields.model.dataset.auto === '1') {
+      fields.model.value = defaults.model;
+      fields.model.dataset.auto = '1';
+    }
+  });
 
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && !modal.hidden) {
@@ -98,5 +159,5 @@ export function initSettings(ctx) {
     }
   });
 
-  return { open, close, save, fill };
+  return { open, close, save, test, fill, collect };
 }

@@ -1,0 +1,26 @@
+name: Ассистент с моделью
+steps:
+  - click: '.tree-row[data-path="src/utils.js"]'
+  - expectText: { selector: '#chat-context', contains: 'src/utils.js' }
+  - eval: { code: "window.Kaitos.llm.setMock(async ({ messages }) => { window.__ctxHasFile = messages.some(m => m.content.includes('src/utils.js')); return '### Итог\\n- файл в контексте: ' + (window.__ctxHasFile ? 'да' : 'нет') + '\\n\\n```js\\nconst a = 1;\\n```\\n'; }); 'готово'", expect: 'готово' }
+  - type: { selector: '#chat-input', text: 'Что в этом файле?' }
+  - click: '#chat-send'
+  - wait: 1500
+  - eval: { code: "window.__ctxHasFile", expect: true }
+  - expectText: { selector: '#chat-messages', contains: 'файл в контексте: да' }
+  - expectCount: { selector: '#chat-messages .md-code', min: 1 }
+  - expectVisible: '#chat-messages .md-copy'
+  - eval: { code: "document.querySelector('#chat-stop').hidden", expect: true }
+  - eval: { code: "document.querySelector('#chat-send').disabled", expect: false }
+  - screenshot: { name: chat-model, width: 1280 }
+  - eval: { code: "window.Kaitos.llm.setMock(() => new Promise(r => setTimeout(() => r('долгий ответ'), 4000))); 'медленно'", expect: 'медленно' }
+  - type: { selector: '#chat-input', text: 'долгий запрос' }
+  - click: '#chat-send'
+  - wait: 300
+  - expectVisible: '#chat-stop'
+  - click: '#chat-stop'
+  - wait: 300
+  - eval: { code: "document.querySelector('#chat-stop').hidden", expect: true }
+  - eval: { code: "window.Kaitos.llm.clearMock(); 'ок'", expect: 'ок' }
+  - screenshot: { name: chat-model, width: 375 }
+  - expectNoConsoleErrors:
