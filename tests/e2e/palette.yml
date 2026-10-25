@@ -1,0 +1,19 @@
+name: Палитра команд
+steps:
+  - click: '#btn-palette'
+  - expectVisible: '#palette'
+  - type: { selector: '#palette-input', text: 'README' }
+  - expectCount: { selector: '.palette__item', min: 1 }
+  - screenshot: { name: palette, width: 1280 }
+  - click: '.palette__item'
+  - expectHidden: '#palette'
+  - expectText: { selector: '#status-file', contains: 'README.md' }
+  - expectVisible: '#editor-input'
+  - click: '#btn-palette'
+  - expectVisible: '#palette'
+  - type: { selector: '#palette-input', text: 'тему' }
+  - expectCount: { selector: '.palette__item', min: 1 }
+  - screenshot: { name: palette, width: 375 }
+  - press: Escape
+  - expectHidden: '#palette'
+  - expectNoConsoleErrors:

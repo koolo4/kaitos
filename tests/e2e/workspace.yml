@@ -1,0 +1,28 @@
+name: Редактор, чат и терминал
+steps:
+  - click: '.tree-row[data-path="src/utils.js"]'
+  - expectVisible: '#editor-input'
+  - expectText: { selector: '#status-file', equals: 'src/utils.js' }
+  - expectCount: { selector: '.tab', equals: 1 }
+  - expectCount: { selector: '.tab.is-active', equals: 1 }
+  - eval: { code: "document.querySelector('#editor-input').value.includes('export function greet')", expect: true }
+  - expectText: { selector: '#chat-context', contains: 'src/utils.js' }
+  - screenshot: { name: editor, width: 1280 }
+  - type: { selector: '#chat-input', text: 'Объясни этот файл' }
+  - click: '#chat-send'
+  - wait: 1200
+  - expectCount: { selector: '.chat-msg', min: 3 }
+  - expectCount: { selector: '.chat-msg--user', min: 1 }
+  - screenshot: { name: chat, width: 1280 }
+  - type: { selector: '#terminal-input', text: 'ls' }
+  - press: Enter
+  - expectText: { selector: '#terminal-output', contains: 'src/' }
+  - type: { selector: '#terminal-input', text: 'cat docs/notes.md' }
+  - press: Enter
+  - expectText: { selector: '#terminal-output', contains: 'Заметки' }
+  - click: '#btn-terminal-toggle'
+  - expectClass: { selector: '#main-area', has: is-terminal-collapsed }
+  - click: '#btn-terminal-toggle'
+  - expectVisible: '#terminal-output'
+  - screenshot: { name: editor, width: 375 }
+  - expectNoConsoleErrors:

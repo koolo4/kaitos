@@ -1,0 +1,6 @@
+{
+  "install": "npm install",
+  "start": "npm run dev",
+  "url": "http://localhost:5173",
+  "readyTimeoutSec": 120
+}
