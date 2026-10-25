@@ -153,6 +153,7 @@ async function boot() {
   showStorage(storage);
   if (storage.mode === 'disk' && ctx.terminal) {
     ctx.terminal.print(`Проект с диска: ${storage.name}, файлов ${storage.files}`, 'ok');
+    ctx.terminal.print('Терминал выполняет настоящие команды в папке проекта. help — подсказка, Ctrl+L — очистить.', 'muted');
   }
 
   startWatchingDisk(storage);

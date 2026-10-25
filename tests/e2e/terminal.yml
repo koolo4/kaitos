@@ -1,0 +1,23 @@
+name: Терминал выполняет настоящие команды
+steps:
+  - open: /
+  - wait: 900
+  - expectText:
+      selector: "#status-storage"
+      contains: "диск:"
+  - expectVisible: "#terminal-input"
+  - type:
+      selector: "#terminal-input"
+      text: "echo проверка-терминала"
+  - press:
+      selector: "#terminal-input"
+      key: Enter
+  - wait: 1200
+  - expectText:
+      selector: "#terminal-output"
+      contains: "проверка-терминала"
+  - expectText:
+      selector: "#terminal-output"
+      contains: "готово за"
+  - screenshot: terminal-real
+  - expectNoConsoleErrors: true

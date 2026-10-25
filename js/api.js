@@ -76,6 +76,8 @@ export function createApi({ baseUrl = '/api', token = '', timeoutMs = 4000 } = {
     removeFile: (path) => request(`/file?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
     /* Изменения файлов на диске после отметки since. */
     changes: (since = 0) => request(`/changes?since=${encodeURIComponent(since)}`, { timeout: 2500 }),
+    /* Настоящие команды в папке проекта (терминал). */
+    run: (command) => request('/run', { method: 'POST', body: { command }, timeout: 70000 }),
     request,
   };
 }
