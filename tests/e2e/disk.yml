@@ -1,0 +1,32 @@
+name: Работа с настоящими файлами на диске
+steps:
+  - open: /
+  - wait: 600
+  - expectVisible: "#status-storage"
+  - expectText:
+      selector: "#status-storage"
+      contains: "диск:"
+  - expectVisible: ".tree-row"
+  - expectCount:
+      selector: ".tree-row"
+      min: 10
+  - click:
+      selector: '.tree-row[data-path="server/paths.js"]'
+  - wait: 200
+  - expectText:
+      selector: "#editor-input"
+      contains: "resolveInside"
+  - expectText:
+      selector: "#editor-highlight"
+      contains: "tok-keyword"
+  - screenshot: disk-editor
+  - viewport:
+      width: 375
+      height: 812
+  - wait: 250
+  - expectVisible: "#status-storage"
+  - screenshot: disk-mobile
+  - viewport:
+      width: 1280
+      height: 800
+  - expectNoConsoleErrors: true
