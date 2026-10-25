@@ -11,17 +11,34 @@ import { spawn } from 'node:child_process';
 const DEFAULT_TIMEOUT = 60000;
 const DEFAULT_LIMIT = 200 * 1024;
 
+/*
+ * Убивает команду вместе с дочерними процессами.
+ * С shell: true одного kill('SIGKILL') мало: оболочка умирает, а запущенная ею программа продолжает жить.
+ */
+function killTree(child) {
+  if (!child.pid) return;
+  if (process.platform === 'win32') {
+    spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+    return;
+  }
+  try {
+    process.kill(-child.pid, 'SIGKILL'); // своя группа процессов — см. detached ниже
+  } catch (error) {
+    child.kill('SIGKILL');
+  }
+}
+
 export function createRunner({ root, timeoutMs = DEFAULT_TIMEOUT, maxOutput = DEFAULT_LIMIT } = {}) {
   const isWindows = process.platform === 'win32';
   const shell = isWindows ? process.env.ComSpec || 'cmd.exe' : process.env.SHELL || '/bin/sh';
 
   /*
-   * Windows: команда целиком оборачивается в кавычки (того требует cmd с /s),
-   * а кодовая страница переключается на UTF-8 — иначе русский текст приходит «кракозябрами».
+   * Команда отдаётся оболочке целиком (shell: true): Node сам экранирует аргументы под cmd или sh.
+   * Ручные кавычки здесь не работают — cmd получает их как часть команды.
+   * На Windows ещё и переключаем кодовую страницу на UTF-8, иначе русский текст приходит «кракозябрами».
    */
   function shellCommand(text) {
-    if (!isWindows) return ['-c', text];
-    return ['/d', '/s', '/c', `"chcp 65001>nul & ${text}"`];
+    return isWindows ? `chcp 65001>nul & ${text}` : text;
   }
 
   function run(command) {
@@ -32,8 +49,10 @@ export function createRunner({ root, timeoutMs = DEFAULT_TIMEOUT, maxOutput = DE
 
     return new Promise((resolve, reject) => {
       const started = Date.now();
-      const child = spawn(shell, shellCommand(text), {
+      const child = spawn(shellCommand(text), {
         cwd: root,
+        shell: true,
+        detached: process.platform !== 'win32',
         windowsHide: true,
         env: { ...process.env, KAITOS: '1', GIT_PAGER: 'cat', PAGER: 'cat', TERM: 'dumb' },
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -60,7 +79,7 @@ export function createRunner({ root, timeoutMs = DEFAULT_TIMEOUT, maxOutput = DE
 
       const timer = setTimeout(() => {
         timedOut = true;
-        child.kill('SIGKILL');
+        killTree(child);
       }, timeoutMs);
       if (timer.unref) timer.unref();
 
