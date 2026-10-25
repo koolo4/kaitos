@@ -71,6 +71,28 @@ async function connectStorage() {
   }
 }
 
+/* Подхватывает правки, сделанные мимо Kaitos: другой редактор, git, скрипт. */
+function startWatchingDisk(storage) {
+  if (storage.mode !== 'disk' || !ctx.fs.startSync) return;
+
+  ctx.fs.startSync({
+    intervalMs: 1500,
+    dirty: (path) => Boolean(ctx.editor && ctx.editor.isDirty(path)),
+    onChange: ({ applied, skipped }) => {
+      if (ctx.tree) ctx.tree.render();
+      for (const item of applied) {
+        if (ctx.editor) ctx.editor.reloadFromDisk(item.path);
+        if (ctx.editor && ctx.editor.tabs.includes(item.path)) ctx.editor.renderTabs();
+      }
+      const names = applied.map((item) => item.path).join(', ');
+      if (ctx.terminal) ctx.terminal.print(`Изменено на диске: ${names}`, 'muted');
+      if (skipped.length && ctx.terminal) {
+        ctx.terminal.print(`Не тронул (есть несохранённые правки): ${skipped.join(', ')}`, 'warn');
+      }
+    },
+  });
+}
+
 function showStorage(state) {
   const chip = $('#status-storage');
   if (chip) {
@@ -130,6 +152,8 @@ async function boot() {
   if (storage.mode === 'disk' && ctx.terminal) {
     ctx.terminal.print(`Проект с диска: ${storage.name}, файлов ${storage.files}`, 'ok');
   }
+
+  startWatchingDisk(storage);
 
   ctx.ready = true;
   ctx.storage = storage;

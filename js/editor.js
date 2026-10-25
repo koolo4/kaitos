@@ -118,6 +118,20 @@ export function initEditor(ctx) {
     input.focus();
   }
 
+  /* Перечитывает открытый файл после изменения на диске, если в нём нет несохранённых правок. */
+  function reloadFromDisk(path) {
+    if (!state.tabs.includes(path)) return false;
+    if (isDirty(path)) return false;
+    const text = contentOf(path);
+    if (state.active === path) {
+      input.value = text;
+      renderGutter();
+      renderHighlight();
+      notify();
+    }
+    return true;
+  }
+
   function close(path) {
     state.tabs = state.tabs.filter((item) => item !== path);
     state.drafts.delete(path);
@@ -224,6 +238,7 @@ export function initEditor(ctx) {
     onChange,
     contentOf,
     isDirty,
+    reloadFromDisk,
     renderTabs,
     renderHighlight,
     get active() {

@@ -13,7 +13,11 @@ export function createRemoteFs({ api, name = 'project' }) {
   const base = createFs({});
   const pending = new Map(); // path -> Promise
   const errors = [];
+  const external = []; // изменения, пришедшие с диска мимо Kaitos
   let loaded = false;
+  let since = 0;
+  let syncTimer = null;
+  let isDirty = () => false; // спрашиваем редактор: есть ли несохранённые правки
 
   function projectName() {
     const parts = String(name || 'project').split(/[\\/]/).filter(Boolean);
@@ -82,11 +86,82 @@ export function createRemoteFs({ api, name = 'project' }) {
     return { pending: pending.size, errors: errors.length };
   }
 
+  /*
+   * Забирает с сервера изменения, сделанные мимо Kaitos, и обновляет зеркало.
+   * Открытый файл с несохранёнными правками не трогаем: иначе редактор потеряет ввод.
+   */
+  async function sync(options = {}) {
+    if (!loaded) return { applied: [], skipped: [] };
+    const dirtyCheck = typeof options.dirty === 'function' ? options.dirty : isDirty;
+    const data = await api.changes(since);
+    since = data.seq ?? since;
+    const applied = [];
+    const skipped = [];
+
+    for (const change of data.changes || []) {
+      const path = change.path;
+      if (pending.has(path)) continue; // это наша собственная запись
+      if (dirtyCheck(path)) {
+        skipped.push(path);
+        continue;
+      }
+      try {
+        if (change.type === 'removed' && base.has(path)) {
+          base.remove(path);
+          applied.push({ path, type: 'removed' });
+          continue;
+        }
+        const { content } = await api.readFile(path);
+        const text = content ?? '';
+        if (base.has(path) && base.read(path) === text) continue;
+        base.load({ ...exportMap(), [path]: text });
+        applied.push({ path, type: base.has(path) ? 'changed' : 'added' });
+      } catch (error) {
+        skipped.push(path);
+      }
+    }
+
+    for (const item of applied) external.push({ ...item, at: Date.now() });
+    if (external.length > 100) external.splice(0, external.length - 100);
+    return { applied, skipped };
+  }
+
+  /* Текущее содержимое зеркала одним объектом (для точечного обновления). */
+  function exportMap() {
+    const map = {};
+    for (const path of base.list()) map[path] = base.read(path);
+    return map;
+  }
+
+  function startSync({ intervalMs = 1500, onChange = null, dirty = null } = {}) {
+    if (dirty) isDirty = dirty;
+    stopSync();
+    const tick = async () => {
+      try {
+        const result = await sync({ dirty: isDirty });
+        if (result.applied.length && onChange) onChange(result);
+      } catch (error) {
+        errors.push({ path: '/api/changes', message: error.message, at: Date.now() });
+      }
+    };
+    syncTimer = setInterval(tick, intervalMs);
+    return syncTimer;
+  }
+
+  function stopSync() {
+    if (syncTimer) clearInterval(syncTimer);
+    syncTimer = null;
+  }
+
   return {
     remote: true,
     name: projectName,
     load,
     flush,
+    sync,
+    startSync,
+    stopSync,
+    external,
     write,
     create,
     remove,
@@ -102,6 +177,9 @@ export function createRemoteFs({ api, name = 'project' }) {
     },
     get pendingCount() {
       return pending.size;
+    },
+    get watching() {
+      return Boolean(syncTimer);
     },
     errors,
   };

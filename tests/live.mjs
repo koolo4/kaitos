@@ -77,4 +77,29 @@ await check('запись файла доходит до диска и отка�
   return 'записан и удалён';
 });
 
+await check('правка на диске сама появляется в приложении', async () => {
+  const path = 'docs/LIVE-WATCH.md';
+  const { doc, K } = await bootApp({}, { fetchMock: fetchToApp });
+  // создаём файл мимо приложения — как это сделал бы другой редактор
+  await fetch(new URL('/api/file', APP), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, content: '# привет из другого редактора\n' }),
+  });
+  const started = Date.now();
+  let seen = false;
+  while (Date.now() - started < 6000) {
+    if (K.fs.has(path)) {
+      seen = true;
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  if (!seen) throw new Error('файл не появился в приложении');
+  if (!K.fs.read(path).includes('другого редактора')) throw new Error('содержимое не подхватилось');
+  if (!doc.querySelector(`.tree-row[data-path="${path}"]`)) throw new Error('дерево не обновилось');
+  await fetch(new URL(`/api/file?path=${encodeURIComponent(path)}`, APP), { method: 'DELETE' });
+  return `${Math.round((Date.now() - started) / 100) / 10} с`;
+});
+
 process.exit(result() ? 1 : 0);

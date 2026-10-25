@@ -1,0 +1,22 @@
+name: Правки извне подхватываются сами
+steps:
+  - open: /
+  - wait: 800
+  - expectText:
+      selector: "#status-storage"
+      contains: "диск:"
+  - click:
+      selector: '.tree-row[data-path="docs/ARCHITECTURE.md"]'
+  - wait: 300
+  - expectText:
+      selector: "#editor-input"
+      contains: "Фаза 6"
+  - screenshot: watch-before
+  - run: "node -e \"require('fs').appendFileSync('docs/ARCHITECTURE.md', '\\n<!-- проверка слежения -->\\n')\""
+  - wait: 2600
+  - expectText:
+      selector: "#editor-input"
+      contains: "проверка слежения"
+  - screenshot: watch-after
+  - run: "node -e \"const fs=require('fs');const t=fs.readFileSync('docs/ARCHITECTURE.md','utf8').replace(/\\n<!-- проверка слежения -->\\n/,'');fs.writeFileSync('docs/ARCHITECTURE.md',t)\""
+  - expectNoConsoleErrors: true
