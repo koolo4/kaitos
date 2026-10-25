@@ -2,7 +2,16 @@
 
 import { bootApp, reporter, wait } from './harness.mjs';
 import { diffLines, diffStats, compactOps, renderDiffHtml } from '../js/diff.js';
-import { parseEdits, stripEditBlocks, normalizeEditPath, applyEdits } from '../js/tools.js';
+import {
+  parseEdits,
+  parsePatches,
+  patchesToEdits,
+  patchContent,
+  stripEditBlocks,
+  normalizeEditPath,
+  applyEdits,
+} from '../js/tools.js';
+import { createFs } from '../js/fs.js';
 
 const { check, result } = reporter('Инструменты агента');
 
@@ -190,11 +199,125 @@ await check('правка с плохим путём не применяется
   return card.querySelector('.edit-card__error').textContent;
 });
 
-await check('промпт содержит протокол правок', async () => {
+await check('промпт содержит оба способа правки', async () => {
   const { buildMessages } = await import('../js/prompts.js');
   const messages = buildMessages({ prompt: 'привет', projectName: 'demo' });
-  if (!messages[0].content.includes('kaitos-write')) throw new Error('протокол не описан в системном промпте');
+  if (!messages[0].content.includes('kaitos-write')) throw new Error('нет kaitos-write в промпте');
+  if (!messages[0].content.includes('kaitos-edit')) throw new Error('нет kaitos-edit в промпте');
+  if (!messages[0].content.includes('НАЙТИ')) throw new Error('нет описания формата замены');
   return true;
+});
+
+/* --- точечные правки --- */
+
+const PATCH = [
+  '```kaitos-edit src/utils.js',
+  '<<<<<<< НАЙТИ',
+  'return `Привет, ${name}!`;',
+  '=======',
+  'return `Здравствуй, ${name}!`;',
+  '>>>>>>> ЗАМЕНИТЬ',
+  '```',
+].join('\n');
+
+await check('разбор блока kaitos-edit', () => {
+  const patches = parsePatches(PATCH);
+  if (patches.length !== 1) throw new Error(`патчей ${patches.length}`);
+  const [patch] = patches;
+  if (patch.path !== 'src/utils.js') throw new Error(patch.path);
+  if (patch.error) throw new Error(patch.error);
+  if (!patch.find.includes('Привет')) throw new Error(`найти: ${patch.find}`);
+  if (!patch.replace.includes('Здравствуй')) throw new Error(`заменить: ${patch.replace}`);
+  return `${patch.path}: ${patch.find.trim()} → ${patch.replace.trim()}`;
+});
+
+await check('patchContent заменяет единственное вхождение', () => {
+  const source = 'export function greet(name) {\n  return `Привет, ${name}!`;\n}\n';
+  const result = patchContent(source, 'return `Привет, ${name}!`;', 'return `Здравствуй, ${name}!`;');
+  if (!result.includes('Здравствуй')) throw new Error(result);
+  if (result.includes('Привет')) throw new Error('старый текст остался');
+  if (result.split('\n').length !== source.split('\n').length) throw new Error('число строк изменилось');
+  return result.split('\n')[1].trim();
+});
+
+await check('patchContent прощает хвостовые пробелы и CRLF', () => {
+  const source = 'const a = 1;   \r\nconst b = 2;\r\n';
+  const result = patchContent(source, 'const a = 1;\nconst b = 2;', 'const a = 10;\nconst b = 2;');
+  if (!result.includes('const a = 10;')) throw new Error(result);
+  return 'мягкое совпадение';
+});
+
+await check('patchContent отказывает: фрагмент не найден', () => {
+  try {
+    patchContent('const a = 1;\n', 'const z = 9;', 'const z = 10;');
+    throw new Error('правка прошла');
+  } catch (error) {
+    if (!error.message.includes('не найден')) throw new Error(error.message);
+    return 'отказ';
+  }
+});
+
+await check('patchContent отказывает: несколько вхождений', () => {
+  const source = 'x();\nx();\n';
+  try {
+    patchContent(source, 'x();', 'y();');
+    throw new Error('неоднозначная правка прошла');
+  } catch (error) {
+    if (!error.message.includes('несколько раз')) throw new Error(error.message);
+    return 'отказ';
+  }
+});
+
+await check('патч превращается в правку с новым содержимым', () => {
+  const fs = createFs({ 'src/utils.js': 'export const n = 1;\nexport const m = 2;\n' });
+  const edits = patchesToEdits(fs, parsePatches('```kaitos-edit src/utils.js\n<<<<<<< НАЙТИ\nconst m = 2;\n=======\nconst m = 20;\n>>>>>>> ЗАМЕНИТЬ\n```'));
+  if (edits.length !== 1) throw new Error(`правок ${edits.length}`);
+  if (edits[0].error) throw new Error(edits[0].error);
+  if (!edits[0].content.includes('const m = 20;')) throw new Error(edits[0].content);
+  if (!edits[0].content.includes('const n = 1;')) throw new Error('потерялась первая строка');
+  if (edits[0].kind !== 'patch') throw new Error('нет пометки вида');
+  return 'готово к применению';
+});
+
+await check('патч к несуществующему файлу отклоняется', () => {
+  const fs = createFs({ 'a.js': 'x\n' });
+  const edits = patchesToEdits(fs, parsePatches('```kaitos-edit b.js\n<<<<<<< НАЙТИ\nx\n=======\ny\n>>>>>>> ЗАМЕНИТЬ\n```'));
+  if (!edits[0].error) throw new Error('ошибки нет');
+  if (!edits[0].error.includes('не найден')) throw new Error(edits[0].error);
+  return edits[0].error;
+});
+
+await check('stripEditBlocks убирает и kaitos-edit', () => {
+  const text = `До.\n\n${PATCH}\n\nПосле.`;
+  const clean = stripEditBlocks(text);
+  if (clean.includes('kaitos-edit') || clean.includes('НАЙТИ')) throw new Error(clean);
+  if (!clean.includes('До.') || !clean.includes('После.')) throw new Error(clean);
+  return clean.replace(/\n+/g, ' ');
+});
+
+await check('ответ с точечной правкой показывает diff и кнопки', async () => {
+  const { window, doc, K } = await bootApp({ provider: 'ollama', model: 'm', baseUrl: 'http://localhost:11434' });
+  K.llm.setMock(async () => `Поменяю приветствие.\n\n${PATCH}\n`);
+  const row = Array.from(doc.querySelectorAll('.tree-row')).find((item) => item.dataset.path === 'src/utils.js');
+  if (!row) throw new Error('нет src/utils.js в демо-проекте');
+  row.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+
+  doc.querySelector('#chat-input').value = 'Замени приветствие';
+  doc.querySelector('#chat-form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  await wait(1400);
+
+  const card = doc.querySelector('.edit-card');
+  if (!card) throw new Error('карточка правки не появилась');
+  if (!card.querySelector('.edit-card__diff')) throw new Error('нет diff');
+  const apply = card.querySelector('[data-apply-edit]');
+  if (!apply) throw new Error('нет кнопки «Применить»');
+  apply.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await wait(40);
+  const content = K.fs.read('src/utils.js');
+  if (!content.includes('Здравствуй')) throw new Error('правка не применена');
+  if (content.includes('Привет,')) throw new Error('старый текст остался');
+  if (content.split('\n').length < 3) throw new Error('файл потерял строки');
+  return 'точечная правка применена';
 });
 
 process.exit(result() ? 1 : 0);

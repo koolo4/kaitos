@@ -6,7 +6,7 @@
 import { $, formatTime } from './dom.js';
 import { buildMessages } from './prompts.js';
 import { renderChatMessage } from './markdown.js';
-import { parseEdits, stripEditBlocks } from './tools.js';
+import { parseEdits, parsePatches, patchesToEdits, stripEditBlocks } from './tools.js';
 import { renderDiffHtml, diffStats, diffLines } from './diff.js';
 
 const ROLE_LABEL = { assistant: 'Kaitos', user: 'Вы' };
@@ -274,7 +274,10 @@ export function initChat(ctx) {
       if (!streamed) hideTyping();
       answer.text = stripEditBlocks(answer.text) || 'Готово.';
       updateNode(node, answer);
-      answer.edits = parseEdits(text);
+      answer.edits = [
+        ...patchesToEdits(ctx.fs, parsePatches(text)),
+        ...parseEdits(text),
+      ];
       if (answer.edits.length) renderEditCards(node, answer.edits);
       if (!answer.text.trim()) {
         answer.text = 'Модель вернула пустой ответ. Попробуйте другую модель или уменьшите объём контекста.';
