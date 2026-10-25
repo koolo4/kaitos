@@ -14,7 +14,15 @@ const DEFAULT_LIMIT = 200 * 1024;
 export function createRunner({ root, timeoutMs = DEFAULT_TIMEOUT, maxOutput = DEFAULT_LIMIT } = {}) {
   const isWindows = process.platform === 'win32';
   const shell = isWindows ? process.env.ComSpec || 'cmd.exe' : process.env.SHELL || '/bin/sh';
-  const shellArgs = isWindows ? ['/d', '/s', '/c'] : ['-c'];
+
+  /*
+   * Windows: команда целиком оборачивается в кавычки (того требует cmd с /s),
+   * а кодовая страница переключается на UTF-8 — иначе русский текст приходит «кракозябрами».
+   */
+  function shellCommand(text) {
+    if (!isWindows) return ['-c', text];
+    return ['/d', '/s', '/c', `"chcp 65001>nul & ${text}"`];
+  }
 
   function run(command) {
     const text = String(command || '').trim();
@@ -24,7 +32,7 @@ export function createRunner({ root, timeoutMs = DEFAULT_TIMEOUT, maxOutput = DE
 
     return new Promise((resolve, reject) => {
       const started = Date.now();
-      const child = spawn(shell, [...shellArgs, text], {
+      const child = spawn(shell, shellCommand(text), {
         cwd: root,
         windowsHide: true,
         env: { ...process.env, KAITOS: '1', GIT_PAGER: 'cat', PAGER: 'cat', TERM: 'dumb' },

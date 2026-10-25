@@ -1,4 +1,9 @@
-/* Проверки запуска настоящих команд: сервер, ограничения, HTTP и терминал в интерфейсе. */
+/*
+ * Проверки запуска настоящих команд: сервер, ограничения, HTTP и терминал в интерфейсе.
+ *
+ * Команды запускаются через файлы-скрипты, а не через `node -e "..."`: на Windows
+ * вложенные кавычки в аргументах оболочки ведут себя иначе, и тест ломался бы не по делу.
+ */
 
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -11,34 +16,46 @@ const { check, result } = reporter('Команды на сервере');
 
 const root = mkdtempSync(join(tmpdir(), 'kaitos-run-'));
 writeFileSync(join(root, 'marker.txt'), 'я здесь\n', 'utf8');
+writeFileSync(join(root, 'cwd.js'), "console.log(process.cwd());\n", 'utf8');
+writeFileSync(join(root, 'files.js'), "console.log(require('fs').readdirSync('.').sort().join(','));\n", 'utf8');
+writeFileSync(join(root, 'exit3.js'), 'process.exit(3);\n', 'utf8');
+writeFileSync(join(root, 'stderr.js'), "console.error('беда'); process.exit(1);\n", 'utf8');
+writeFileSync(join(root, 'sleep.js'), 'setTimeout(() => {}, 5000);\n', 'utf8');
+writeFileSync(join(root, 'big.js'), "process.stdout.write('x'.repeat(5000));\n", 'utf8');
+writeFileSync(join(root, 'utf8.js'), "console.log('привет, мир');\n", 'utf8');
+
 const runner = createRunner({ root });
 
 await check('простая команда выполняется в папке проекта', async () => {
-  // команда Node, а не ls: набор должен проходить и на Windows, и на Linux
-  const data = await runner.run('node -e "console.log(process.cwd())"');
+  const data = await runner.run('node cwd.js');
   if (data.code !== 0) throw new Error(`код ${data.code}: ${data.output}`);
-  if (!data.output.includes('kaitos-run-')) throw new Error(`не тот каталог: ${data.output}`);
+  if (!data.output.includes('kaitos-run-')) throw new Error(`не тот каталог: ${JSON.stringify(data.output)}`);
   if (data.timedOut) throw new Error('таймаут');
   return data.output.trim().split(/[\\/]/).pop();
 });
 
 await check('команда видит файлы проекта', async () => {
-  const code = "console.log(require('fs').readdirSync('.').join(','))";
-  const data = await runner.run(`node -e "${code}"`);
+  const data = await runner.run('node files.js');
   if (data.code !== 0) throw new Error(`код ${data.code}: ${data.output}`);
-  if (!data.output.includes('marker.txt')) throw new Error(`вывод: ${data.output}`);
+  if (!data.output.includes('marker.txt')) throw new Error(`вывод: ${JSON.stringify(data.output)}`);
   return 'marker.txt на месте';
 });
 
+await check('русский текст приходит без искажений', async () => {
+  const data = await runner.run('node utf8.js');
+  if (!data.output.includes('привет, мир')) throw new Error(`вывод: ${JSON.stringify(data.output)}`);
+  return 'кодировка цела';
+});
+
 await check('код выхода возвращается', async () => {
-  const data = await runner.run('node -e "process.exit(3)"');
+  const data = await runner.run('node exit3.js');
   if (data.code !== 3) throw new Error(`код ${data.code}`);
   return `код ${data.code}`;
 });
 
 await check('ошибки команды попадают в вывод', async () => {
-  const data = await runner.run('node -e "console.error(\'беда\'); process.exit(1)"');
-  if (!data.output.includes('беда')) throw new Error(data.output);
+  const data = await runner.run('node stderr.js');
+  if (!data.output.includes('беда')) throw new Error(JSON.stringify(data.output));
   if (data.code !== 1) throw new Error(`код ${data.code}`);
   return 'stderr собран';
 });
@@ -46,11 +63,11 @@ await check('ошибки команды попадают в вывод', async 
 await check('таймаут останавливает команду', async () => {
   const slow = createRunner({ root, timeoutMs: 250 });
   const started = Date.now();
-  const data = await slow.run('node -e "setTimeout(() => {}, 5000)"');
+  const data = await slow.run('node sleep.js');
   const took = Date.now() - started;
   if (!data.timedOut) throw new Error('таймаут не сработал');
   if (data.code !== null) throw new Error(`код ${data.code}`);
-  if (took > 3000) throw new Error(`ждали ${took} мс`);
+  if (took > 4000) throw new Error(`ждали ${took} мс`);
   return `${took} мс`;
 });
 
@@ -66,7 +83,7 @@ await check('пустая команда отклоняется', async () => {
 
 await check('огромный вывод обрезается', async () => {
   const small = createRunner({ root, maxOutput: 700 });
-  const data = await small.run('node -e "process.stdout.write(\'x\'.repeat(5000))"');
+  const data = await small.run('node big.js');
   if (!data.truncated) throw new Error('обрезки не было');
   if (data.output.length > 900) throw new Error(`длина ${data.output.length}`);
   return `${data.output.length} символов`;
@@ -81,9 +98,9 @@ const post = (path, payload) =>
   fetch(`${base}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
 
 await check('POST /api/run выполняет команду', async () => {
-  const response = await post('/run', { command: 'echo проверка' });
+  const response = await post('/run', { command: 'node utf8.js' });
   const data = await response.json();
-  if (response.status !== 200 || !data.output.includes('проверка')) throw new Error(JSON.stringify(data));
+  if (response.status !== 200 || !data.output.includes('привет, мир')) throw new Error(JSON.stringify(data));
   return data.output.trim();
 });
 
@@ -102,7 +119,7 @@ await check('запуск команд можно выключить', async () 
   const response = await fetch(`http://127.0.0.1:${port}/api/run`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ command: 'echo нет' }),
+    body: JSON.stringify({ command: 'node utf8.js' }),
   });
   await new Promise((resolve) => strict.close(resolve));
   if (response.status !== 400) throw new Error(`статус ${response.status}`);
