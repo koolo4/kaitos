@@ -3,6 +3,15 @@
  * Задача — дать небольшой модели ровно то, что нужно: роль, файл, выделение, историю и вопрос.
  */
 
+export const EDIT_PROTOCOL = [
+  'Если нужно изменить файл, после объяснения добавь блок с языком kaitos-write и путём файла:',
+  '```kaitos-write путь/к/файлу',
+  'полное новое содержимое файла',
+  '```',
+  'В таком блоке всегда полное содержимое файла, а не фрагмент и не многоточие.',
+  'Путь только относительный, внутри проекта. Не больше одной правки на ответ без просьбы.',
+].join('\n');
+
 export const SYSTEM_PROMPT = [
   'Ты — Kaitos, ассистент внутри редактора кода.',
   'Отвечай по-русски, коротко и по делу.',
@@ -37,7 +46,7 @@ export function fileContext(file) {
 
 export function buildMessages({ prompt, history = [], file = null, projectName = 'demo' }) {
   const messages = [
-    { role: 'system', content: `${SYSTEM_PROMPT}\nПроект: ${projectName}.` },
+    { role: 'system', content: `${SYSTEM_PROMPT}\nПроект: ${projectName}.\n\n${EDIT_PROTOCOL}` },
   ];
 
   const context = fileContext(file);

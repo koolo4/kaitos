@@ -6,6 +6,8 @@
 import { $, formatTime } from './dom.js';
 import { buildMessages } from './prompts.js';
 import { renderChatMessage } from './markdown.js';
+import { parseEdits, stripEditBlocks } from './tools.js';
+import { renderDiffHtml, diffStats, diffLines } from './diff.js';
 
 const ROLE_LABEL = { assistant: 'Kaitos', user: 'Вы' };
 
@@ -18,7 +20,7 @@ export function initChat(ctx) {
   const sendButton = $('#chat-send');
 
   const messages = [];
-  const state = { busy: false, controller: null };
+  const state = { busy: false, controller: null, pending: [] };
 
   function scrollDown() {
     messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -140,6 +142,88 @@ export function initChat(ctx) {
       .map((item) => ({ role: item.role, text: item.text }));
   }
 
+  /* Карточка предложенной правки: diff, «Применить», «Отклонить». */
+  function renderEditCards(node, edits) {
+    edits.forEach((edit, index) => {
+      const card = document.createElement('div');
+      card.className = 'edit-card';
+      card.dataset.index = String(state.pending.length);
+
+      const head = document.createElement('div');
+      head.className = 'edit-card__head';
+
+      const title = document.createElement('span');
+      title.className = 'edit-card__title';
+      title.textContent = edit.error ? `✕ ${edit.rawPath}` : `${edit.path}`;
+
+      const badge = document.createElement('span');
+      badge.className = 'edit-card__badge';
+      const before = !edit.error && ctx.fs.has(edit.path) ? ctx.fs.read(edit.path) : '';
+      const stats = edit.error ? { added: 0, removed: 0 } : diffStats(diffLines(before, edit.content));
+      badge.textContent = edit.error
+        ? 'нельзя применить'
+        : `${ctx.fs.has(edit.path) ? 'изменение' : 'новый файл'} · +${stats.added} −${stats.removed}`;
+
+      head.append(title, badge);
+      card.append(head);
+
+      if (edit.error) {
+        const error = document.createElement('div');
+        error.className = 'edit-card__error';
+        error.textContent = edit.error;
+        card.append(error);
+      } else {
+        const body = document.createElement('div');
+        body.className = 'edit-card__diff';
+        body.innerHTML = renderDiffHtml(before, edit.content, 2);
+        card.append(body);
+
+        const actions = document.createElement('div');
+        actions.className = 'edit-card__actions';
+
+        const apply = document.createElement('button');
+        apply.type = 'button';
+        apply.className = 'btn-primary btn-sm';
+        apply.dataset.applyEdit = String(state.pending.length);
+        apply.textContent = 'Применить';
+
+        const reject = document.createElement('button');
+        reject.type = 'button';
+        reject.className = 'btn-ghost btn-sm';
+        reject.dataset.rejectEdit = String(state.pending.length);
+        reject.textContent = 'Отклонить';
+
+        actions.append(apply, reject);
+        card.append(actions);
+      }
+
+      state.pending.push(edit);
+      node.append(card);
+      void index;
+    });
+    scrollDown();
+  }
+
+  function applyEdit(index, card) {
+    const edit = state.pending[index];
+    if (!edit || edit.error) return;
+    ctx.fs.write(edit.path, edit.content);
+    if (ctx.editor && ctx.editor.refresh) ctx.editor.refresh(edit.path);
+    if (ctx.tree && ctx.tree.render) ctx.tree.render();
+    if (ctx.onFilesChanged) ctx.onFilesChanged();
+    card.classList.add('edit-card--applied');
+    const actions = card.querySelector('.edit-card__actions');
+    if (actions) actions.innerHTML = '<span class="edit-card__done">✓ применено</span>';
+    addMessage('assistant', `Файл ${edit.path} обновлён.`);
+  }
+
+  function rejectEdit(index, card) {
+    card.classList.add('edit-card--rejected');
+    const actions = card.querySelector('.edit-card__actions');
+    if (actions) actions.innerHTML = '<span class="edit-card__done">отклонено</span>';
+    void index;
+  }
+
   async function send(rawText) {
     const prompt = String(rawText || '').trim();
     if (!prompt || state.busy) return;
@@ -188,7 +272,10 @@ export function initChat(ctx) {
       });
       if (!answer.text) answer.text = text;
       if (!streamed) hideTyping();
+      answer.text = stripEditBlocks(answer.text) || 'Готово.';
       updateNode(node, answer);
+      answer.edits = parseEdits(text);
+      if (answer.edits.length) renderEditCards(node, answer.edits);
       if (!answer.text.trim()) {
         answer.text = 'Модель вернула пустой ответ. Попробуйте другую модель или уменьшите объём контекста.';
         answer.error = true;
@@ -239,6 +326,21 @@ export function initChat(ctx) {
   quick.addEventListener('click', (event) => {
     const button = event.target.closest('[data-prompt]');
     if (button) send(button.dataset.prompt);
+  });
+
+  /* Применение и отклонение предложенных правок. */
+  messagesEl.addEventListener('click', (event) => {
+    const apply = event.target.closest('[data-apply-edit]');
+    if (apply) {
+      const card = apply.closest('.edit-card');
+      applyEdit(Number(apply.dataset.applyEdit), card);
+      return;
+    }
+    const reject = event.target.closest('[data-reject-edit]');
+    if (reject) {
+      const card = reject.closest('.edit-card');
+      rejectEdit(Number(reject.dataset.rejectEdit), card);
+    }
   });
 
   /* Копирование блоков кода из ответов. */

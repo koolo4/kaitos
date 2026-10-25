@@ -131,6 +131,18 @@ export function initEditor(ctx) {
     toast(`Сохранено: ${state.active}`, 'ok');
   }
 
+  /* Перечитывает файл из файловой системы (после правки моделью). */
+  function refresh(path) {
+    if (!path) return;
+    state.drafts.delete(path);
+    if (state.active === path) {
+      input.value = ctx.fs.has(path) ? ctx.fs.read(path) : '';
+      renderGutter();
+    }
+    renderTabs();
+    notify();
+  }
+
   function onChange(listener) {
     state.listeners.push(listener);
     listener(info());
@@ -185,6 +197,7 @@ export function initEditor(ctx) {
     open,
     close,
     save,
+    refresh,
     onChange,
     contentOf,
     isDirty,
