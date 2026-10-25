@@ -66,6 +66,8 @@ export function createApi({ baseUrl = '/api', token = '', timeoutMs = 4000 } = {
     readFile: (path) => request(`/file?path=${encodeURIComponent(path)}`),
     writeFile: (path, content) => request('/file', { method: 'POST', body: { path, content } }),
     removeFile: (path) => request(`/file?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
+    /* Изменения файлов на диске после отметки since. */
+    changes: (since = 0) => request(`/changes?since=${encodeURIComponent(since)}`, { timeout: 2500 }),
     request,
   };
 }

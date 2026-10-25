@@ -6,6 +6,7 @@
 
 import http from 'node:http';
 import { createFileService } from './files.js';
+import { createWatcher } from './watch.js';
 import { PathError } from './paths.js';
 
 const PORT = Number(process.env.KAITOS_PORT || 5178);
@@ -60,8 +61,9 @@ function readBody(req) {
   });
 }
 
-export function createServer({ root = ROOT, token = TOKEN } = {}) {
+export function createServer({ root = ROOT, token = TOKEN, watchFiles = true } = {}) {
   const files = createFileService(root);
+  const watcher = watchFiles ? createWatcher({ root }).start() : null;
   const requiredToken = String(token || '');
 
   function authorized(req, url) {
@@ -71,7 +73,7 @@ export function createServer({ root = ROOT, token = TOKEN } = {}) {
     return header === requiredToken || query === requiredToken;
   }
 
-  return http.createServer(async (req, res) => {
+  const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
 
     if (req.method === 'OPTIONS') {
@@ -94,6 +96,17 @@ export function createServer({ root = ROOT, token = TOKEN } = {}) {
       if (req.method === 'GET' && url.pathname === '/api/health') {
         const list = await files.list();
         send(res, 200, { ok: true, root: files.root, files: list.length, version: 1 });
+        return;
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/changes') {
+        const since = Number(url.searchParams.get('since') || 0);
+        if (!watcher) {
+          send(res, 200, { ok: true, seq: since, changes: [], watching: false });
+          return;
+        }
+        const batch = watcher.drain(since);
+        send(res, 200, { ok: true, watching: watcher.running, ...batch });
         return;
       }
 
@@ -147,6 +160,12 @@ export function createServer({ root = ROOT, token = TOKEN } = {}) {
       fail(res, known ? 400 : 500, error.message || 'Внутренняя ошибка сервера');
     }
   });
+
+  server.on('close', () => {
+    if (watcher) watcher.close();
+  });
+
+  return server;
 }
 
 /* Запуск из командной строки. */
@@ -158,6 +177,7 @@ if (isMain) {
     console.log(`Kaitos server: http://${HOST}:${PORT}`);
     console.log(`Проект:       ${ROOT}`);
     console.log(`Токен:        ${TOKEN ? 'задан через KAITOS_TOKEN' : 'не требуется (только локально)'}`);
+    console.log('Слежение:     включено (правки других программ подхватываются)');
     console.log('Остановить:   Ctrl+C');
   });
 }

@@ -28,6 +28,10 @@ function fakeServer(files = { 'src/main.js': 'export const a = 1;\n', 'README.md
 
     if (full.endsWith('/api/health')) return json(200, { ok: true, root: '/home/user/project-demo', files: Object.keys(store).length });
 
+    if (full.includes('/api/changes')) {
+      return json(200, { ok: true, seq: 0, changes: [], watching: true });
+    }
+
     if (full.startsWith('/api/files') || full.includes('/api/files')) {
       return json(200, { ok: true, files: Object.keys(store).sort() });
     }
