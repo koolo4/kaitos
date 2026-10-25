@@ -6,12 +6,16 @@
   "description": "Kaitos — AI-редактор кода в браузере",
   "scripts": {
     "dev": "vite --port 5173 --strictPort",
+    "server": "node server/index.js",
+    "dev:full": "node scripts/dev-all.mjs",
     "build": "vite build",
     "preview": "vite preview --port 5173 --strictPort",
-    "test": "node tests/run.mjs"
+    "pretest": "node scripts/ensure-deps.mjs",
+    "test": "node tests/run.mjs",
+    "test:live": "node tests/live.mjs"
   },
   "devDependencies": {
-    "vite": "^5.4.10",
-    "jsdom": "^25.0.1"
+    "jsdom": "^25.0.1",
+    "vite": "^5.4.10"
   }
 }

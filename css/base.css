@@ -217,6 +217,7 @@ input, select, textarea { font-family: inherit; font-size: inherit; color: inher
 }
 
 .status-item { overflow: hidden; text-overflow: ellipsis; }
+.status-item--ok { color: var(--ok); }
 .status-spacer { flex: 1 1 auto; }
 
 @media (max-width: 1200px) {

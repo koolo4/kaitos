@@ -15,7 +15,7 @@ export const PROVIDERS = {
     id: 'ollama',
     label: 'Ollama (локально)',
     defaultBaseUrl: 'http://localhost:11434',
-    defaultModel: 'qwen2.5-coder:7b',
+    defaultModel: 'qwen3.5:9b',
     hint: 'Запустите Ollama и разрешите браузеру обращаться к ней: переменная OLLAMA_ORIGINS=*',
   },
   openai: {
