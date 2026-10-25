@@ -1,11 +1,13 @@
 /* Редактор кода: вкладки, нумерация строк, черновики, сохранение в файловую систему. */
 
 import { $, toast } from './dom.js';
+import { highlight } from './highlight.js';
 
 export function initEditor(ctx) {
   const editorEl = $('#editor');
   const input = $('#editor-input');
   const gutter = $('#line-numbers');
+  const highlightLayer = $('#editor-highlight');
   const tabsEl = $('#tabs');
   const emptyEl = $('#editor-empty');
 
@@ -40,6 +42,18 @@ export function initEditor(ctx) {
   function notify() {
     const payload = info();
     for (const listener of state.listeners) listener(payload);
+  }
+
+  /* Подсвеченный слой под textarea: тот же текст, разметка по языку файла. */
+  function renderHighlight() {
+    if (!highlightLayer) return;
+    if (!state.active) {
+      highlightLayer.innerHTML = '';
+      return;
+    }
+    highlightLayer.innerHTML = `${highlight(input.value, state.active)}\n`;
+    highlightLayer.scrollTop = input.scrollTop;
+    highlightLayer.scrollLeft = input.scrollLeft;
   }
 
   function renderGutter() {
@@ -95,6 +109,7 @@ export function initEditor(ctx) {
     showEditor(true);
     renderTabs();
     renderGutter();
+    renderHighlight();
     input.scrollTop = 0;
     input.selectionStart = 0;
     input.selectionEnd = 0;
@@ -118,6 +133,7 @@ export function initEditor(ctx) {
     }
     renderTabs();
     renderGutter();
+    renderHighlight();
     notify();
     if (ctx.tree) ctx.tree.setActive(state.active);
   }
@@ -138,6 +154,7 @@ export function initEditor(ctx) {
     if (state.active === path) {
       input.value = ctx.fs.has(path) ? ctx.fs.read(path) : '';
       renderGutter();
+      renderHighlight();
     }
     renderTabs();
     notify();
@@ -152,12 +169,17 @@ export function initEditor(ctx) {
     if (!state.active) return;
     state.drafts.set(state.active, input.value);
     renderGutter();
+    renderHighlight();
     renderTabs();
     notify();
   });
 
   input.addEventListener('scroll', () => {
     gutter.scrollTop = input.scrollTop;
+    if (highlightLayer) {
+      highlightLayer.scrollTop = input.scrollTop;
+      highlightLayer.scrollLeft = input.scrollLeft;
+    }
   });
 
   input.addEventListener('keydown', (event) => {
@@ -172,6 +194,7 @@ export function initEditor(ctx) {
       input.setRangeText('  ', input.selectionStart, input.selectionEnd, 'end');
       state.drafts.set(state.active, input.value);
       renderGutter();
+      renderHighlight();
       renderTabs();
       notify();
     }
@@ -202,6 +225,7 @@ export function initEditor(ctx) {
     contentOf,
     isDirty,
     renderTabs,
+    renderHighlight,
     get active() {
       return state.active;
     },

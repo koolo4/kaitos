@@ -1,0 +1,26 @@
+name: Подсветка синтаксиса в редакторе
+steps:
+  - click: '.tree-row[data-path="src/utils.js"]'
+  - expectVisible: '#editor-highlight'
+  - eval: { code: "document.querySelector('#editor-highlight .tok-keyword') !== null", expect: true }
+  - eval: { code: "document.querySelector('#editor-highlight .tok-string') !== null", expect: true }
+  - eval: { code: "document.querySelector('#editor-highlight .tok-fn') !== null", expect: true }
+  - eval: { code: "document.querySelectorAll('#editor-highlight span[class^=tok-]').length > 5", expect: true }
+  - screenshot: { name: highlight-js, width: 1280 }
+  - click: '.tree-row[data-path="styles/theme.css"]'
+  - expectVisible: '#editor-highlight'
+  - eval: { code: "document.querySelector('#editor-highlight .tok-selector') !== null", expect: true }
+  - eval: { code: "document.querySelector('#editor-highlight .tok-prop') !== null", expect: true }
+  - screenshot: { name: highlight-css, width: 1280 }
+  - click: '.tree-row[data-path="package.json"]'
+  - eval: { code: "document.querySelector('#editor-highlight .tok-prop') !== null", expect: true }
+  - eval: { code: "document.querySelector('#editor-highlight .tok-number') !== null", expect: true }
+  - click: '#btn-theme'
+  - eval: { code: "document.documentElement.dataset.theme", expect: 'light' }
+  - eval: { code: "getComputedStyle(document.querySelector('#editor-highlight .tok-prop')).color", expect: 'rgb(138, 97, 0)' }
+  - screenshot: { name: highlight-light, width: 1280 }
+  - click: '#btn-theme'
+  - eval: { code: "document.documentElement.dataset.theme", expect: 'dark' }
+  - eval: { code: "document.querySelector('#editor-highlight').textContent.trim() === document.querySelector('#editor-input').value.trim()", expect: true }
+  - screenshot: { name: highlight-mobile, width: 375 }
+  - expectNoConsoleErrors:
