@@ -138,6 +138,21 @@ await check('GET /api/health', async () => {
   return `${body.files} файлов`;
 });
 
+await check('health не падает даже при проблемах с обходом', async () => {
+  const emptyRoot = mkdtempSync(join(tmpdir(), 'kaitos-empty-'));
+  const quiet = createServer({ root: emptyRoot, watchFiles: false });
+  await new Promise((resolve) => quiet.listen(0, '127.0.0.1', resolve));
+  const port = quiet.address().port;
+  const response = await fetch(`http://127.0.0.1:${port}/api/health`);
+  const body = await response.json();
+  await new Promise((resolve) => quiet.close(resolve));
+  rmSync(emptyRoot, { recursive: true, force: true });
+  if (response.status !== 200) throw new Error(`статус ${response.status}`);
+  if (body.ok !== true) throw new Error(JSON.stringify(body));
+  if (body.files !== 0) throw new Error(`файлов ${body.files}`);
+  return 'пустой проект — 200';
+});
+
 await check('GET /api/files', async () => {
   const { body } = await api.get('/files');
   if (!body.files.includes('src/main.js')) throw new Error('нет файла в списке');

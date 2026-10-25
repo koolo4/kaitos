@@ -63,6 +63,7 @@ async function connectStorage() {
 
   try {
     const health = await api.health();
+    if (health.warning) ctx.storageWarning = health.warning;
     const remote = createRemoteFs({ api, name: health.root || 'project' });
     const stats = await remote.load();
     ctx.fs = remote;
@@ -154,6 +155,10 @@ async function boot() {
   if (storage.mode === 'disk' && ctx.terminal) {
     ctx.terminal.print(`Проект с диска: ${storage.name}, файлов ${storage.files}`, 'ok');
     ctx.terminal.print('Терминал выполняет настоящие команды в папке проекта. help — подсказка, Ctrl+L — очистить.', 'muted');
+  }
+
+  if (ctx.storageWarning && ctx.terminal) {
+    ctx.terminal.print(ctx.storageWarning, 'err');
   }
 
   startWatchingDisk(storage);

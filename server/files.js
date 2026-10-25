@@ -5,7 +5,7 @@
 
 import { promises as fs } from 'node:fs';
 import { createPathGuard, toPosix, assertFileName, PathError } from './paths.js';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024; // 2 МБ на файл
 const SKIP_DIRS = new Set(['.git', '.justai', 'node_modules', 'dist', '.vite']);
@@ -29,21 +29,24 @@ export function createFileService(root) {
     const start = guard.resolveInside(dir);
     const files = [];
 
-    async function walk(absolute, relative) {
+    async function walk(absolute, relative, depth = 0) {
+      if (depth > 24) return; // защита от символических циклов
       let entries;
       try {
         entries = await fs.readdir(absolute, { withFileTypes: true });
       } catch (error) {
-        if (error.code === 'ENOENT') return;
+        // Папку без прав, занятую или уже удалённую просто пропускаем:
+        // один недоступный каталог не должен ронять весь список файлов.
+        if (['ENOENT', 'EACCES', 'EPERM', 'EBUSY', 'ELOOP', 'ENOTDIR', 'EINVAL'].includes(error.code)) return;
         throw error;
       }
       for (const entry of entries) {
         if (entry.name.startsWith('.') && entry.name !== '.gitignore') continue;
         if (SKIP_DIRS.has(entry.name)) continue;
-        const childAbsolute = `${absolute}/${entry.name}`;
+        const childAbsolute = join(absolute, entry.name);
         const childRelative = relative ? `${relative}/${entry.name}` : entry.name;
         if (entry.isDirectory()) {
-          await walk(childAbsolute, childRelative);
+          await walk(childAbsolute, childRelative, depth + 1);
         } else if (entry.isFile()) {
           files.push(childRelative);
           if (files.length > 5000) throw new PathError('Слишком много файлов в проекте (лимит 5000)');
