@@ -168,16 +168,29 @@ export function patchContent(source, find, replace) {
 
 /* Превращает патчи в обычные правки: с готовым новым содержимым файла. */
 export function patchesToEdits(fs, patches) {
+  /*
+   * Несколько правок одного файла в одном ответе применяются последовательно:
+   * каждая следующая считается от результата предыдущей. Иначе вторая правка не нашла бы
+   * свой фрагмент, если первая уже изменила соседнюю строку.
+   */
+  const working = new Map();
+  const rejected = new Set(); // файл уже получил ошибку — остальные правки к нему не применяем
+
   return patches.map((patch) => {
     if (patch.error) return { ...patch, content: '', kind: 'patch' };
-    if (!fs.has(patch.path)) {
+    if (!fs.has(patch.path) && !working.has(patch.path)) {
       return { ...patch, content: '', error: `Файл не найден: ${patch.path}`, kind: 'patch' };
     }
+    if (rejected.has(patch.path)) {
+      return { ...patch, content: '', error: 'Пропущено: предыдущая правка этого файла не применилась', kind: 'patch' };
+    }
     try {
-      const before = fs.read(patch.path);
+      const before = working.has(patch.path) ? working.get(patch.path) : fs.read(patch.path);
       const content = patchContent(before, patch.find, patch.replace);
+      working.set(patch.path, content);
       return { ...patch, content, kind: 'patch' };
     } catch (error) {
+      rejected.add(patch.path);
       return { ...patch, content: '', error: error.message, kind: 'patch' };
     }
   });
