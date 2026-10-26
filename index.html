@@ -39,6 +39,7 @@
           <div class="git-head">
             <span class="panel-title">Git</span>
             <span id="git-summary" class="git-summary">—</span>
+            <button class="btn-ghost btn-xs" id="btn-git-log" type="button" aria-expanded="false">Журнал</button>
             <button class="btn-ghost btn-xs" id="btn-git-refresh" title="Обновить статус">⟳</button>
           </div>
           <div id="git-branch-controls" class="git-branch-controls" hidden>
@@ -46,6 +47,9 @@
             <button class="btn-ghost btn-xs" id="btn-git-switch" type="button">Перейти</button>
           </div>
           <div id="git-changes" class="git-changes"></div>
+          <div id="git-log-panel" class="git-log-panel" hidden>
+            <div id="git-log" class="git-log"></div>
+          </div>
           <div id="git-diff" class="git-diff" hidden></div>
           <div class="git-commit">
             <input id="git-message" class="input input--sm" type="text" placeholder="Сообщение коммита (Ctrl+Enter)" />

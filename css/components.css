@@ -531,6 +531,21 @@
   padding: 4px 0;
 }
 
+.git-log-panel {
+  flex: 0 1 auto;
+  max-height: 160px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+}
+
+.git-log-panel[hidden] { display: none; }
+.git-log { padding: 4px 0; }
+.git-log-row { padding: 5px 10px; border-bottom: 1px solid var(--border); }
+.git-log-row:last-child { border-bottom: 0; }
+.git-log-subject { font-size: 11px; color: var(--text); overflow-wrap: anywhere; }
+.git-log-meta { margin-top: 2px; font-size: 10px; color: var(--muted); }
+.git-log-hash { color: var(--accent); font-family: var(--font-code); }
+
 .git-row {
   display: flex;
   align-items: center;

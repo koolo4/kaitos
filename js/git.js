@@ -34,8 +34,11 @@ export function initGit(ctx) {
   const branchControls = $('#git-branch-controls');
   const branchSelect = $('#git-branch');
   const switchButton = $('#btn-git-switch');
+  const logButton = $('#btn-git-log');
+  const logPanel = $('#git-log-panel');
+  const logList = $('#git-log');
 
-  const state = { changes: [], branch: null, branches: [], targetBranch: null, repo: false, busy: false, switching: false, selected: null };
+  const state = { changes: [], branch: null, branches: [], targetBranch: null, repo: false, busy: false, switching: false, logLoaded: false, logOpen: false, selected: null };
 
   function api() {
     return ctx.api && ctx.api.git;
@@ -88,6 +91,8 @@ export function initGit(ctx) {
     }
 
     if (branchControls) branchControls.hidden = !state.repo || state.branches.length < 2;
+    if (logPanel) logPanel.hidden = !state.repo || !state.logOpen;
+    if (logButton) logButton.setAttribute('aria-expanded', String(state.logOpen));
     if (branchSelect) {
       const selected = state.targetBranch || state.branch || '';
       branchSelect.innerHTML = '';
@@ -206,9 +211,11 @@ export function initGit(ctx) {
         }
       }
       state.targetBranch = result.branch;
+      state.logLoaded = false;
       toast(`Переключено на ветку ${result.branch}`, 'ok');
       if (ctx.terminal) ctx.terminal.print(`git switch ${result.branch}`, 'ok');
       await refresh();
+      if (state.logOpen) await loadLog();
     } catch (error) {
       toast(`Не удалось переключить ветку: ${error.message}`, 'err');
       if (ctx.terminal) ctx.terminal.print(`git switch: ${error.message}`, 'err');
@@ -217,6 +224,56 @@ export function initGit(ctx) {
       state.switching = false;
       render();
     }
+  }
+
+  function renderLog(commits) {
+    if (!logList) return;
+    logList.innerHTML = '';
+    if (!commits.length) {
+      const empty = document.createElement('div');
+      empty.className = 'git-empty';
+      empty.textContent = 'Коммитов пока нет';
+      logList.append(empty);
+      return;
+    }
+    for (const commit of commits) {
+      const row = document.createElement('div');
+      row.className = 'git-log-row';
+      const subject = document.createElement('div');
+      subject.className = 'git-log-subject';
+      subject.textContent = commit.subject || '(без сообщения)';
+      const meta = document.createElement('div');
+      meta.className = 'git-log-meta';
+      const hash = document.createElement('span');
+      hash.className = 'git-log-hash';
+      hash.textContent = commit.hash || '—';
+      const author = document.createElement('span');
+      author.textContent = commit.author || 'неизвестный автор';
+      const date = document.createElement('span');
+      date.textContent = commit.date || '';
+      meta.append(hash, document.createTextNode(' · '), author, document.createTextNode(' · '), date);
+      row.append(subject, meta);
+      logList.append(row);
+    }
+  }
+
+  async function loadLog() {
+    if (!logList) return;
+    logList.textContent = 'Загружаю журнал…';
+    try {
+      const data = await api().log(20);
+      state.logLoaded = true;
+      renderLog(data.commits || []);
+    } catch (error) {
+      state.logLoaded = false;
+      logList.textContent = `Не удалось загрузить журнал: ${error.message}`;
+    }
+  }
+
+  async function toggleLog() {
+    state.logOpen = !state.logOpen;
+    render();
+    if (state.logOpen && !state.logLoaded) await loadLog();
   }
 
   async function commit() {
@@ -232,12 +289,14 @@ export function initGit(ctx) {
     try {
       const result = await api().commit(message);
       if (messageInput) messageInput.value = '';
+      state.logLoaded = false;
       if (diffBox) diffBox.hidden = true;
       state.selected = null;
       toast(`Коммит ${result.hash}: ${result.files} файлов`, 'ok');
       if (ctx.terminal) ctx.terminal.print(`git commit ${result.hash} — ${message}`, 'ok');
-      // коммит меняет файлы .git — обновляем дерево и статус
+      // коммит меняет .git: обновляем статус, журнал и дерево.
       await refresh();
+      if (state.logOpen) await loadLog();
     } catch (error) {
       toast(`Коммит не удался: ${error.message}`, 'err');
       if (ctx.terminal) ctx.terminal.print(`git commit: ${error.message}`, 'err');
@@ -254,6 +313,7 @@ export function initGit(ctx) {
     render();
   });
   if (switchButton) switchButton.addEventListener('click', switchBranch);
+  if (logButton) logButton.addEventListener('click', toggleLog);
   if (messageInput) {
     messageInput.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
@@ -269,6 +329,7 @@ export function initGit(ctx) {
     showDiff,
     commit,
     switchBranch,
+    loadLog,
     get changes() { return state.changes.slice(); },
     get branches() { return state.branches.slice(); },
   };

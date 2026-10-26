@@ -210,7 +210,7 @@ await new Promise((resolve) => server.close(resolve));
 function mockServer({ repo = true, changes = [], diff = '' } = {}) {
   const store = { 'a.js': 'export const a = 1;\n' };
   const current = { branch: 'main' };
-  const calls = { commit: [], diff: [], checkout: [] };
+  const calls = { commit: [], diff: [], checkout: [], log: 0 };
   const fetchMock = async (url, options = {}) => {
     const full = String(url);
     const method = options.method || 'GET';
@@ -226,6 +226,10 @@ function mockServer({ repo = true, changes = [], diff = '' } = {}) {
       calls.checkout.push(body.branch);
       current.branch = body.branch;
       return json(200, { ok: true, branch: body.branch, changed: true });
+    }
+    if (full.includes('/api/git/log')) {
+      calls.log += 1;
+      return json(200, { ok: true, commits: [{ hash: 'abc1234', subject: 'Первый коммит', author: 'Иван', date: 'сегодня' }] });
     }
     if (full.includes('/api/git/diff')) {
       calls.diff.push(full.split('path=')[1]);
@@ -264,6 +268,22 @@ await check('интерфейс: панель показывает ветку и
   const badge = doc.querySelector('.git-badge').textContent;
   if (!badge) throw new Error('нет значка статуса');
   return summary;
+});
+
+await check('интерфейс: журнал коммитов загружается и показывает автора', async () => {
+  const mock = mockServer();
+  const { window, doc } = await bootApp({}, { fetchMock: mock.fetchMock });
+  await wait(30);
+  doc.querySelector('#btn-git-log').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await wait(30);
+  const panel = doc.querySelector('#git-log-panel');
+  if (panel.hidden) throw new Error('журнал скрыт');
+  const row = doc.querySelector('.git-log-row');
+  if (!row || !row.textContent.includes('Первый коммит') || !row.textContent.includes('Иван')) {
+    throw new Error(row?.textContent || 'коммиты не появились');
+  }
+  if (mock.calls.log !== 1) throw new Error(`запросов ${mock.calls.log}`);
+  return 'журнал, автор и время отображены';
 });
 
 await check('интерфейс: клик по файлу показывает diff', async () => {
