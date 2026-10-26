@@ -421,6 +421,8 @@
 }
 
 .chat-actions__buttons { display: flex; align-items: center; gap: 6px; }
+#chat-plan-toggle[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+#chat-plan-toggle:disabled { opacity: 0.55; cursor: not-allowed; }
 .btn-ghost[hidden] { display: none; }
 .btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
 
@@ -429,6 +431,23 @@
 .settings-test { font-size: 12px; color: var(--muted); word-break: break-word; }
 .settings-test--ok { color: var(--ok); }
 .settings-test--err { color: var(--err); }
+
+/* План автономного агента */
+
+.plan-card {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+}
+.plan-card__title { margin: 0 0 6px; font-size: 13px; }
+.plan-card__steps { margin: 0 0 8px; padding-left: 20px; font-size: 12px; }
+.plan-card__steps li { margin: 4px 0; }
+.plan-card__files { margin-bottom: 8px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.plan-card__actions { display: flex; gap: 6px; }
+.plan-card--done { opacity: 0.7; }
+.plan-card__error { color: var(--err); font-size: 12px; }
 
 /* Карточка предложенной правки */
 

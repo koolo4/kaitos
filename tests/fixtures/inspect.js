@@ -1,5 +1,5 @@
 /* Команды для кроссплатформенных e2e-проверок терминала на реальном проекте. */
-import { readdirSync, statSync, readFileSync } from 'node:fs';
+import { readdirSync, statSync, readFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
@@ -24,6 +24,8 @@ if (action === 'ls') {
     // Повторный e2e может завершиться до очистки; отсутствующая ветка уже чистое состояние.
     if (execFileSync('git', ['branch', '--list', target], { encoding: 'utf8' }).trim()) throw error;
   }
+} else if (action === 'file-delete' && target) {
+  rmSync(resolve(target), { force: true });
 } else {
   console.error('использование: inspect.js ls | cat <путь>');
   process.exitCode = 2;
