@@ -57,6 +57,69 @@ await check('парсер backlog отклоняет циклические и �
   return 'циклы и ссылки на отсутствующие задачи блокируются';
 });
 
+await check('проект запускает одобренный npm-скрипт и передаёт сбой агенту', async () => {
+  const settings = { provider: 'ollama', model: 'qwen3.5:9b', baseUrl: 'http://localhost:11434' };
+  const { window, doc, K } = await bootApp(settings);
+  K.fs.write('package.json', JSON.stringify({ scripts: { pretest: 'echo before', test: 'node tests/fake.js', posttest: 'echo after', build: 'vite build', lint: 'eslint .', arbitrary: 'rm -rf .' } }));
+  K.storage.mode = 'disk';
+  const task = { id: 'verify-task', title: 'Проверить сборку', status: 'in_progress' };
+  K.project.store.addTasks([task]);
+  const commands = [];
+  K.api.run = async (command) => {
+    commands.push(command);
+    return command === 'npm test'
+      ? { code: 1, output: 'FAKE TEST FAILURE: assertion failed', durationMs: 17, timedOut: false }
+      : { code: 0, output: 'build passed', durationMs: 23, timedOut: false };
+  };
+  let repairPrompt = '';
+  K.llm.setMock(async ({ messages }) => {
+    repairPrompt = messages.map((message) => message.content).join('\n');
+    return '```kaitos-plan\n{"title":"Исправление теста","steps":["Исправить причину ошибки"],"files":["src/main.js"]}\n```';
+  });
+
+  click(window, doc.querySelector('#btn-project'));
+  let card = doc.querySelector('.project-task');
+  let select = card.querySelector('[data-check-select]');
+  if (select.options.length !== 3) throw new Error('не отфильтрованы npm-скрипты');
+  if (!select.options[0].textContent.includes('pretest') || !select.options[0].textContent.includes('posttest')) {
+    throw new Error('скрытые npm lifecycle-скрипты не показаны');
+  }
+  select.value = 'npm test';
+  click(window, card.querySelector('[data-run-check]'));
+  await wait(100);
+  if (K.project.store.get().tasks[0].verification.ok) throw new Error('ошибка теста записана как успех');
+  click(window, doc.querySelector('[data-fix-check]'));
+  await wait(500);
+  if (!repairPrompt.includes('FAKE TEST FAILURE')) throw new Error('вывод проверки не передан модели');
+  if (!doc.querySelector('.plan-card')) throw new Error('агент не предложил план исправления');
+
+  click(window, doc.querySelector('#btn-project'));
+  card = doc.querySelector('.project-task');
+  select = card.querySelector('[data-check-select]');
+  select.value = 'npm run build';
+  click(window, card.querySelector('[data-run-check]'));
+  await wait(100);
+  if (!K.project.store.get().tasks[0].verification.ok) throw new Error('успешная проверка не сохранена');
+  K.project.store.addTasks([{ id: 'stop-task', title: 'Остановка проверки', status: 'in_progress' }]);
+  K.api.run = async (command, signal) => {
+    commands.push(command);
+    return new Promise((resolve, reject) => signal.addEventListener('abort', () => reject(new Error('Команда остановлена')), { once: true }));
+  };
+  click(window, doc.querySelector('#project-close'));
+  click(window, doc.querySelector('#btn-project'));
+  const stopCard = Array.from(doc.querySelectorAll('.project-task')).find((item) => item.dataset.taskId === 'stop-task');
+  const stopSelect = stopCard.querySelector('[data-check-select]');
+  stopSelect.value = 'npm run lint';
+  click(window, stopCard.querySelector('[data-run-check]'));
+  await wait(20);
+  click(window, doc.querySelector('[data-stop-check="stop-task"]'));
+  await wait(20);
+  const stopped = K.project.store.get().tasks.find((item) => item.id === 'stop-task');
+  if (!stopped.verification.output.includes('Команда остановлена')) throw new Error('остановка не попала в результат');
+  if (commands.join(',') !== 'npm test,npm run build,npm run lint') throw new Error(`запущены лишние команды: ${commands.join(',')}`);
+  return 'команды требуют явного запуска, сохраняются результаты и сбои; остановка работает';
+});
+
 await check('ИИ предлагает backlog, пользователь подтверждает, зависимости управляют доступом', async () => {
   const settings = { provider: 'ollama', model: 'qwen3.5:9b', baseUrl: 'http://localhost:11434', temperature: 0.2, maxTokens: 2048 };
   const { window, doc, K, errors } = await bootApp(settings);

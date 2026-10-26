@@ -7,6 +7,7 @@ const PRIORITY_LABELS = { low: 'низкий приоритет', normal: 'об�
 const STATUS_ORDER = ['todo', 'in_progress', 'done', 'blocked'];
 const BACKLOG_FENCE = /```kaitos-project\s*\n([\s\S]*?)```/i;
 const MAX_GENERATED_TASKS = 12;
+const CHECK_SCRIPT = /^(test|build|lint|check|typecheck)(:[a-zA-Z0-9_-]+)*$/;
 
 export function parseBacklog(text) {
   const match = BACKLOG_FENCE.exec(String(text ?? ''));
@@ -77,6 +78,7 @@ export function initProject(ctx, { root = '' } = {}) {
   const store = createProjectStore({ root, name: storage.name || (ctx.fs.name && ctx.fs.name()) });
   let draft = null;
   let busy = false;
+  const execution = { taskId: null, controller: null };
 
   function saveProject() {
     store.update({ title: titleInput.value, vision: visionInput.value });
@@ -107,8 +109,104 @@ export function initProject(ctx, { root = '' } = {}) {
     return { ready: waiting.length === 0, waiting };
   }
 
+  function availableChecks() {
+    if (!ctx.fs.has('package.json')) return [];
+    try {
+      const data = JSON.parse(ctx.fs.read('package.json'));
+      const scripts = data && data.scripts && typeof data.scripts === 'object' ? data.scripts : {};
+      return Object.entries(scripts)
+        .filter(([name, script]) => CHECK_SCRIPT.test(name) && String(script || '').trim())
+        .map(([name, script]) => {
+          const lifecycle = [`pre${name}`, name, `post${name}`]
+            .filter((hook) => scripts[hook])
+            .map((hook) => `${hook}: ${String(scripts[hook])}`);
+          return {
+            name,
+            script: lifecycle.join(' · ').slice(0, 480),
+            command: name === 'test' ? 'npm test' : `npm run ${name}`,
+          };
+        })
+        .slice(0, 8);
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function renderVerification(task, checks) {
+    if (task.status !== 'in_progress' && !task.verification) return null;
+    const section = document.createElement('div');
+    section.className = 'project-task__verification';
+    if (task.verification) {
+      const result = document.createElement('div');
+      result.className = `project-check-result ${task.verification.ok ? 'project-check-result--ok' : 'project-check-result--err'}`;
+      const status = task.verification.ok ? 'Проверка прошла' : 'Проверка не пройдена';
+      result.textContent = `${status}: ${task.verification.command} · код ${task.verification.code ?? 'нет ответа'} · ${task.verification.durationMs} мс`;
+      section.append(result);
+      if (task.verification.output) {
+        const output = document.createElement('pre');
+        output.className = 'project-check-output';
+        output.textContent = task.verification.output;
+        section.append(output);
+      }
+    }
+    if (task.status === 'in_progress') {
+      if (!checks.length) {
+        const note = document.createElement('div');
+        note.className = 'muted small';
+        note.textContent = 'В package.json нет скриптов test/build/lint/check для запуска.';
+        section.append(note);
+      } else {
+        const controls = document.createElement('div');
+        controls.className = 'project-check-controls';
+        const select = document.createElement('select');
+        select.className = 'input project-task__status';
+        select.dataset.checkSelect = task.id;
+        select.setAttribute('aria-label', `Команда проверки: ${task.title}`);
+        for (const item of checks) {
+          const option = document.createElement('option');
+          option.value = item.command;
+          option.textContent = `${item.command} — ${item.script}`;
+          select.append(option);
+        }
+        const run = document.createElement('button');
+        run.type = 'button';
+        run.className = 'btn-ghost btn-xs';
+        run.dataset.runCheck = task.id;
+        run.textContent = execution.taskId === task.id ? 'Выполняется…' : 'Запустить проверку';
+        run.disabled = execution.taskId !== null || !ctx.api?.run || ctx.storage?.mode !== 'disk';
+        controls.append(select, run);
+        if (execution.taskId === task.id) {
+          const stop = document.createElement('button');
+          stop.type = 'button';
+          stop.className = 'btn-ghost btn-xs';
+          stop.dataset.stopCheck = task.id;
+          stop.textContent = 'Остановить';
+          controls.append(stop);
+        }
+        section.append(controls);
+        if (ctx.storage?.mode !== 'disk') {
+          const note = document.createElement('div');
+          note.className = 'muted small';
+          note.textContent = 'Подключите локальный сервер Kaitos, чтобы выполнять команды проекта.';
+          section.append(note);
+        }
+      }
+      if (task.verification && !task.verification.ok) {
+        const repair = document.createElement('button');
+        repair.type = 'button';
+        repair.className = 'btn-ghost btn-xs';
+        repair.dataset.fixCheck = task.id;
+        repair.textContent = 'Передать ошибку агенту';
+        repair.disabled = Boolean(ctx.chat?.busy || ctx.chat?.planPending);
+        section.append(repair);
+      }
+    }
+    return section;
+  }
+
   function renderTasks() {
     const state = store.get();
+    const checks = availableChecks();
     const counts = { todo: 0, in_progress: 0, done: 0, blocked: 0 };
     state.tasks.forEach((task) => { counts[task.status] += 1; });
     taskCount.textContent = `${state.tasks.length} · ${counts.done} готово · ${counts.in_progress} в работе`;
@@ -164,6 +262,8 @@ export function initProject(ctx, { root = '' } = {}) {
       remove.textContent = 'Удалить';
       controls.append(status, plan, remove);
       card.append(info, controls);
+      const verification = renderVerification(task, checks);
+      if (verification) card.append(verification);
       taskList.append(card);
     }
   }
@@ -280,7 +380,7 @@ export function initProject(ctx, { root = '' } = {}) {
     }
   }
 
-  function planTask(id) {
+  function sendTaskToChat(id, verification = null) {
     const state = store.get();
     const task = state.tasks.find((item) => item.id === id);
     if (!task) return;
@@ -301,9 +401,78 @@ export function initProject(ctx, { root = '' } = {}) {
       `Цель проекта: ${state.vision || '(описание не задано)'}`,
       `Задача: ${task.title}`,
       `Описание: ${task.description || '(нет дополнительного описания)'}`,
-      'Сначала составь план реализации именно этой задачи и перечисли только необходимые файлы.',
+      ...(verification ? [
+        `Проверка завершилась ошибкой: команда ${verification.command}, код выхода ${verification.code ?? 'нет ответа'}.`,
+        `Вывод проверки:\n${String(verification.output || '(пустой вывод)').slice(0, 4000)}`,
+        'Исправь проблему в рамках этой задачи. Сначала составь план правок и перечисли только нужные файлы.',
+      ] : ['Сначала составь план реализации именно этой задачи и перечисли только необходимые файлы.']),
     ].join('\n\n');
-    if (ctx.chat && typeof ctx.chat.planTask === 'function') ctx.chat.planTask(prompt);
+    ctx.chat.planTask(prompt);
+  }
+
+  function planTask(id) {
+    sendTaskToChat(id);
+  }
+
+  function fixFailedCheck(id) {
+    const task = store.get().tasks.find((item) => item.id === id);
+    if (!task || !task.verification || task.verification.ok) return;
+    sendTaskToChat(id, task.verification);
+  }
+
+  async function runVerification(id, command) {
+    if (execution.taskId !== null) return;
+    const task = store.get().tasks.find((item) => item.id === id);
+    const approved = availableChecks().find((item) => item.command === command);
+    if (!task || task.status !== 'in_progress' || !approved) {
+      aiStatus.textContent = 'Выберите проверку из списка package.json.';
+      return;
+    }
+    if (ctx.storage?.mode !== 'disk' || !ctx.api?.run) {
+      aiStatus.textContent = 'Для запуска команд подключите локальный сервер Kaitos.';
+      return;
+    }
+
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    execution.taskId = id;
+    execution.controller = controller;
+    renderTasks();
+    aiStatus.textContent = `Запускаю ${approved.command}. Команда проекта может выполнять произвольный код — подтверждение дано нажатием кнопки.`;
+    const startedAt = Date.now();
+    try {
+      const result = await ctx.api.run(approved.command, controller ? controller.signal : null);
+      const record = {
+        command: approved.command,
+        ok: result.code === 0 && !result.timedOut,
+        code: Number.isInteger(result.code) ? result.code : null,
+        output: String(result.output || '').slice(-1600),
+        durationMs: Number(result.durationMs) || Date.now() - startedAt,
+        at: Date.now(),
+      };
+      store.updateTask(id, { verification: record });
+      aiStatus.textContent = record.ok
+        ? `${approved.command}: проверка прошла. Отметьте задачу готовой после просмотра результата.`
+        : `${approved.command}: проверка завершилась с ошибкой. Можно передать её агенту для исправления.`;
+    } catch (error) {
+      const record = {
+        command: approved.command,
+        ok: false,
+        code: null,
+        output: error.message || 'Команду не удалось запустить.',
+        durationMs: Date.now() - startedAt,
+        at: Date.now(),
+      };
+      store.updateTask(id, { verification: record });
+      aiStatus.textContent = record.output;
+    } finally {
+      execution.taskId = null;
+      execution.controller = null;
+      renderTasks();
+    }
+  }
+
+  function stopVerification(id) {
+    if (execution.taskId === id && execution.controller) execution.controller.abort();
   }
 
   modal.addEventListener('click', (event) => {
@@ -326,6 +495,15 @@ export function initProject(ctx, { root = '' } = {}) {
   taskList.addEventListener('click', (event) => {
     const button = event.target.closest('[data-plan-task]');
     if (button) planTask(button.dataset.planTask);
+    const runButton = event.target.closest('[data-run-check]');
+    if (runButton) {
+      const select = runButton.closest('.project-task').querySelector('[data-check-select]');
+      if (select) runVerification(runButton.dataset.runCheck, select.value);
+    }
+    const stopButton = event.target.closest('[data-stop-check]');
+    if (stopButton) stopVerification(stopButton.dataset.stopCheck);
+    const fixButton = event.target.closest('[data-fix-check]');
+    if (fixButton) fixFailedCheck(fixButton.dataset.fixCheck);
     const removeButton = event.target.closest('[data-remove-task]');
     if (removeButton) {
       store.removeTask(removeButton.dataset.removeTask);

@@ -39,6 +39,16 @@ function normalizeTask(task = {}) {
     status: STATUSES.has(task.status) ? task.status : 'todo',
     priority: PRIORITIES.has(task.priority) ? task.priority : 'normal',
     dependsOn,
+    verification: task.verification && typeof task.verification === 'object'
+      ? {
+        command: cleanText(task.verification.command, 180),
+        ok: Boolean(task.verification.ok),
+        code: Number.isInteger(task.verification.code) ? task.verification.code : null,
+        output: cleanText(task.verification.output, 1600),
+        durationMs: Math.max(0, Number(task.verification.durationMs) || 0),
+        at: Number(task.verification.at) || Date.now(),
+      }
+      : null,
     createdAt: Number(task.createdAt) || Date.now(),
   };
 }

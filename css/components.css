@@ -671,3 +671,10 @@
   .project-task__controls { justify-content: space-between; }
   .project-task__status { flex: 1; max-width: none; }
 }
+.project-task__verification { grid-column: 1 / -1; display: grid; gap: 6px; padding-top: 7px; border-top: 1px solid var(--border); }
+.project-check-controls { display: flex; flex-wrap: wrap; gap: 6px; }
+.project-check-controls select { flex: 1; min-width: 150px; }
+.project-check-result { font-size: 11px; }
+.project-check-result--ok { color: var(--ok); }
+.project-check-result--err { color: var(--err); }
+.project-check-output { max-height: 120px; margin: 0; padding: 7px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border-radius: var(--radius-sm); background: var(--bg); color: var(--muted); font: 11px/1.4 var(--font-mono); }
