@@ -4,7 +4,7 @@
  * редактор, дерево файлов, чат, терминал, настройки и палитра команд.
  */
 
-import { $, formatTime } from './dom.js';
+import { $, formatTime, toast } from './dom.js';
 import { createFs } from './fs.js';
 import { initEditor } from './editor.js';
 import { initTree } from './tree.js';
@@ -86,10 +86,14 @@ function startWatchingDisk(storage) {
         if (ctx.editor) ctx.editor.reloadFromDisk(item.path);
         if (ctx.editor && ctx.editor.tabs.includes(item.path)) ctx.editor.renderTabs();
       }
-      const names = applied.map((item) => item.path).join(', ');
-      if (ctx.terminal) ctx.terminal.print(`Изменено на диске: ${names}`, 'muted');
-      if (skipped.length && ctx.terminal) {
-        ctx.terminal.print(`Не тронул (есть несохранённые правки): ${skipped.join(', ')}`, 'warn');
+      if (applied.length && ctx.terminal) {
+        const names = applied.map((item) => item.path).join(', ');
+        ctx.terminal.print(`Изменено на диске: ${names}`, 'muted');
+      }
+      if (skipped.length) {
+        const names = skipped.join(', ');
+        if (ctx.terminal) ctx.terminal.print(`Конфликт: на диске изменён файл с несохранёнными правками: ${names}`, 'warn');
+        toast(`Конфликт правок: ${names}. Несохранённый текст оставлен без изменений.`, 'warn', 7000);
       }
     },
   });

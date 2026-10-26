@@ -276,7 +276,10 @@ await check('интерфейс: несохранённая правка не з
   await wait(1900);
   if (input.value !== 'моя несохранённая правка\n') throw new Error(`ввод потерян: ${input.value.trim()}`);
   if (K.fs.read('src/main.js').includes('другого редактора')) throw new Error('зеркало перезаписано');
-  return 'ввод сохранён';
+  const toast = doc.querySelector('.toast--warn');
+  if (!toast || !toast.textContent.includes('src/main.js')) throw new Error('нет уведомления о конфликте');
+  if (!toast.textContent.includes('оставлен без изменений')) throw new Error(toast.textContent);
+  return 'ввод сохранён, конфликт показан в уведомлении';
 });
 
 rmSync(root, { recursive: true, force: true });

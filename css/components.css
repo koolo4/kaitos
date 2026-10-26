@@ -345,6 +345,7 @@
 
 .toast--ok { border-left-color: var(--ok); }
 .toast--err { border-left-color: var(--err); }
+.toast--warn { border-left-color: var(--warn); }
 
 /* Ответы ассистента: markdown, блоки кода, ошибки */
 

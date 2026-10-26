@@ -139,7 +139,9 @@ export function createRemoteFs({ api, name = 'project' }) {
     const tick = async () => {
       try {
         const result = await sync({ dirty: isDirty });
-        if (result.applied.length && onChange) onChange(result);
+        // Важно сообщать и о пропущенных изменениях: при dirty-файле это конфликт,
+        // иначе внешнее обновление будет незаметно отброшено.
+        if ((result.applied.length || result.skipped.length) && onChange) onChange(result);
       } catch (error) {
         errors.push({ path: '/api/changes', message: error.message, at: Date.now() });
       }
