@@ -6,7 +6,7 @@
 import { $, formatTime } from './dom.js';
 import { buildMessages } from './prompts.js';
 import { renderChatMessage } from './markdown.js';
-import { parseEdits, parsePatches, patchesToEdits, stripEditBlocks } from './tools.js';
+import { parseEdits, parsePatches, patchesToEdits, patchContent, stripEditBlocks } from './tools.js';
 import { renderDiffHtml, diffStats, diffLines } from './diff.js';
 
 const ROLE_LABEL = { assistant: 'Kaitos', user: 'Вы' };
@@ -207,7 +207,23 @@ export function initChat(ctx) {
   function applyEdit(index, card) {
     const edit = state.pending[index];
     if (!edit || edit.error) return;
-    ctx.fs.write(edit.path, edit.content);
+
+    // Точечную правку считаем от актуального текста, а не от снимка в карточке:
+    // так порядок нажатий не важен и несколько правок одного файла не затирают друг друга.
+    let content = edit.content;
+    if (edit.kind === 'patch' && ctx.fs.has(edit.path)) {
+      try {
+        content = patchContent(ctx.fs.read(edit.path), edit.find, edit.replace);
+      } catch (error) {
+        if (ctx.terminal) ctx.terminal.print(`Правка ${edit.path} не применилась: ${error.message}`, 'err');
+        card.classList.add('edit-card--rejected');
+        const actions = card.querySelector('.edit-card__actions');
+        if (actions) actions.innerHTML = `<span class="edit-card__done">не применилось: ${error.message}</span>`;
+        return;
+      }
+    }
+
+    ctx.fs.write(edit.path, content);
     if (ctx.editor && ctx.editor.refresh) ctx.editor.refresh(edit.path);
     if (ctx.tree && ctx.tree.render) ctx.tree.render();
     if (ctx.onFilesChanged) ctx.onFilesChanged();

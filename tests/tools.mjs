@@ -287,6 +287,68 @@ await check('патч к несуществующему файлу отклон�
   return edits[0].error;
 });
 
+await check('несколько правок одного файла применяются последовательно', () => {
+  const fs = createFs({ 'a.js': 'const first = 1;\nconst second = 2;\nconst third = 3;\n' });
+  const text = [
+    '```kaitos-edit a.js\n<<<<<<< НАЙТИ\nconst first = 1;\n=======\nconst first = 10;\n>>>>>>> ЗАМЕНИТЬ\n```',
+    '```kaitos-edit a.js\n<<<<<<< НАЙТИ\nconst third = 3;\n=======\nconst third = 30;\n>>>>>>> ЗАМЕНИТЬ\n```',
+  ].join('\n');
+  const edits = patchesToEdits(fs, parsePatches(text));
+  if (edits.length !== 2) throw new Error(`правок ${edits.length}`);
+  for (const edit of edits) if (edit.error) throw new Error(edit.error);
+  if (!edits[1].content.includes('const first = 10;')) throw new Error('вторая правка потеряла первую');
+  if (!edits[1].content.includes('const third = 30;')) throw new Error('вторая правка не применилась');
+  if (!edits[1].content.includes('const second = 2;')) throw new Error('потерялась неизменённая строка');
+  return 'обе правки в одном результате';
+});
+
+await check('ошибка одной правки не ломает остальные правки файла', () => {
+  const fs = createFs({ 'a.js': 'const a = 1;\n' });
+  const text = [
+    '```kaitos-edit a.js\n<<<<<<< НАЙТИ\nconst zzz = 9;\n=======\nconst zzz = 10;\n>>>>>>> ЗАМЕНИТЬ\n```',
+    '```kaitos-edit a.js\n<<<<<<< НАЙТИ\nconst a = 1;\n=======\nconst a = 2;\n>>>>>>> ЗАМЕНИТЬ\n```',
+  ].join('\n');
+  const edits = patchesToEdits(fs, parsePatches(text));
+  if (!edits[0].error) throw new Error('первая правка должна была не найтись');
+  if (!edits[1].error) throw new Error('вторая правка должна быть пропущена');
+  if (!edits[1].error.includes('Пропущено')) throw new Error(edits[1].error);
+  return edits[1].error;
+});
+
+await check('порядок применения правок не важен', async () => {
+  const { window, doc, K } = await bootApp({ provider: 'ollama', model: 'm', baseUrl: 'http://localhost:11434' });
+  const original = K.fs.read('src/utils.js');
+  if (!original.includes('greet')) throw new Error('нет демо-файла utils.js');
+
+  const answer = [
+    'Две правки.',
+    '```kaitos-edit src/utils.js\n<<<<<<< НАЙТИ\nreturn `Привет, ${name}!`;\n=======\nreturn `Здравствуй, ${name}!`;\n>>>>>>> ЗАМЕНИТЬ\n```',
+    '```kaitos-edit src/utils.js\n<<<<<<< НАЙТИ\nexport function greet(name) {\n=======\nexport function greet(name = \'мир\') {\n>>>>>>> ЗАМЕНИТЬ\n```',
+  ].join('\n');
+  K.llm.setMock(async () => answer);
+
+  const row = Array.from(doc.querySelectorAll('.tree-row')).find((item) => item.dataset.path === 'src/utils.js');
+  row.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  doc.querySelector('#chat-input').value = 'Две правки';
+  doc.querySelector('#chat-form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  await wait(1400);
+
+  const cards = Array.from(doc.querySelectorAll('.edit-card'));
+  if (cards.length !== 2) throw new Error(`карточек ${cards.length}`);
+
+  // нарочно применяем вторую раньше первой
+  cards[1].querySelector('[data-apply-edit]').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await wait(40);
+  cards[0].querySelector('[data-apply-edit]').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await wait(40);
+
+  const result = K.fs.read('src/utils.js');
+  if (!result.includes('Здравствуй')) throw new Error('первая правка потерялась');
+  if (!result.includes("name = 'мир'")) throw new Error('вторая правка потерялась');
+  if (!result.includes('export function sum')) throw new Error('файл потерял остальные функции');
+  return 'обе правки на месте при обратном порядке';
+});
+
 await check('stripEditBlocks убирает и kaitos-edit', () => {
   const text = `До.\n\n${PATCH}\n\nПосле.`;
   const clean = stripEditBlocks(text);
