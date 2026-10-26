@@ -9,9 +9,7 @@ steps:
   - type:
       selector: "#terminal-input"
       text: "echo проверка-терминала"
-  - press:
-      selector: "#terminal-input"
-      key: Enter
+  - press:\nEnter
   - wait: 1200
   - expectText:
       selector: "#terminal-output"

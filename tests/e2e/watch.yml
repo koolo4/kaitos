@@ -5,8 +5,7 @@ steps:
   - expectText:
       selector: "#status-storage"
       contains: "диск:"
-  - click:
-      selector: '.tree-row[data-path="docs/ARCHITECTURE.md"]'
+  - click: '.tree-row[data-path="docs/ARCHITECTURE.md"]'
   - wait: 300
   - expectText:
       selector: "#editor-input"
