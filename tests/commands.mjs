@@ -168,6 +168,8 @@ function liveServer() {
     if (full.includes('/api/health')) return json(200, { ok: true, root: '/home/user/term-demo' });
     if (full.includes('/api/changes')) return json(200, { ok: true, seq: 0, changes: [], watching: true });
     if (full.includes('/api/git/status')) return json(200, { ok: true, repo: true, branch: 'main', changes: [] });
+    if (full.includes('/api/git/branches')) return json(200, { ok: true, repo: true, current: 'main', branches: ['main'] });
+    if (full.endsWith('/api/git/checkout')) return json(200, { ok: true, branch: 'main', changed: false });
     if (full.includes('/api/files')) return json(200, { ok: true, files: ['index.js'] });
     if (full.endsWith('/api/run')) {
       const { command } = JSON.parse(options.body);

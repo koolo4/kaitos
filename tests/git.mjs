@@ -55,6 +55,29 @@ await check('статус чистого репозитория', async () => {
   return data.branch;
 });
 
+await check('список веток и безопасное переключение', async () => {
+  const original = (await api.status()).branch;
+  quietGit(['branch', 'feature/kaitos-test']);
+  const listed = await api.branches();
+  if (!listed.branches.includes(original)) throw new Error(`нет текущей ветки ${original}`);
+  if (!listed.branches.includes('feature/kaitos-test')) throw new Error('новая ветка не найдена');
+  const switched = await api.checkout('feature/kaitos-test');
+  if (!switched.changed || switched.branch !== 'feature/kaitos-test') throw new Error(JSON.stringify(switched));
+  if ((await api.status()).branch !== 'feature/kaitos-test') throw new Error('ветка не переключилась');
+
+  writeFileSync(join(root, 'a.js'), 'грязная правка\n', 'utf8');
+  try {
+    await api.checkout(original);
+    throw new Error('переключение с грязной копией прошло');
+  } catch (error) {
+    if (!error.message.includes('Сначала сохраните')) throw new Error(error.message);
+  }
+  writeFileSync(join(root, 'a.js'), 'export const a = 1;\n', 'utf8');
+  await api.checkout(original);
+  if ((await api.status()).branch !== original) throw new Error('не вернулись на исходную ветку');
+  return `${listed.branches.length} ветки; грязная копия защищена`;
+});
+
 await check('правка и новый файл видны в статусе', async () => {
   writeFileSync(join(root, 'a.js'), 'export const a = 2;\n', 'utf8');
   writeFileSync(join(root, 'b.js'), 'export const b = 1;\n', 'utf8');
@@ -133,6 +156,27 @@ const base = `http://127.0.0.1:${server.address().port}/api`;
 await check('HTTP: статус, diff, коммит', async () => {
   const status = await (await fetch(`${base}/git/status`)).json();
   if (!status.repo) throw new Error('нет репозитория');
+  const branches = await (await fetch(`${base}/git/branches`)).json();
+  if (!branches.branches.includes(status.branch)) throw new Error(`нет ${status.branch}`);
+  const invalid = await fetch(`${base}/git/checkout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ branch: 'kaitos-branch-does-not-exist' }),
+  });
+  if (invalid.status !== 400) throw new Error(`ошибка ветки: ${invalid.status}`);
+  const target = branches.branches.find((branch) => branch !== status.branch);
+  const switchResponse = await fetch(`${base}/git/checkout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ branch: target }),
+  });
+  const switched = await switchResponse.json();
+  if (switchResponse.status !== 200 || switched.branch !== target) throw new Error(JSON.stringify(switched));
+  await fetch(`${base}/git/checkout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ branch: status.branch }),
+  });
 
   writeFileSync(join(root, 'a.js'), 'export const a = 3;\n', 'utf8');
   const diff = await (await fetch(`${base}/git/diff?path=a.js`)).json();
@@ -165,7 +209,8 @@ await new Promise((resolve) => server.close(resolve));
 
 function mockServer({ repo = true, changes = [], diff = '' } = {}) {
   const store = { 'a.js': 'export const a = 1;\n' };
-  const calls = { commit: [], diff: [] };
+  const current = { branch: 'main' };
+  const calls = { commit: [], diff: [], checkout: [] };
   const fetchMock = async (url, options = {}) => {
     const full = String(url);
     const method = options.method || 'GET';
@@ -174,7 +219,14 @@ function mockServer({ repo = true, changes = [], diff = '' } = {}) {
     if (full.includes('/api/health')) return json(200, { ok: true, root: '/home/user/git-demo' });
     if (full.includes('/api/changes')) return json(200, { ok: true, seq: 0, changes: [], watching: true });
     if (full.includes('/api/files')) return json(200, { ok: true, files: Object.keys(store) });
-    if (full.includes('/api/git/status')) return json(200, { ok: true, repo, branch: 'main', changes });
+    if (full.includes('/api/git/status')) return json(200, { ok: true, repo, branch: current.branch, changes });
+    if (full.includes('/api/git/branches')) return json(200, { ok: true, repo, current: current.branch, branches: ['main', 'feature'] });
+    if (full.endsWith('/api/git/checkout')) {
+      const body = JSON.parse(options.body);
+      calls.checkout.push(body.branch);
+      current.branch = body.branch;
+      return json(200, { ok: true, branch: body.branch, changed: true });
+    }
     if (full.includes('/api/git/diff')) {
       calls.diff.push(full.split('path=')[1]);
       return json(200, { ok: true, diff, empty: !diff, path: 'a.js' });
@@ -247,6 +299,45 @@ await check('интерфейс: коммит отправляет сообще�
   if (!mock.calls.commit.includes('моя правка')) throw new Error(`вызовы: ${mock.calls.commit.join(',')}`);
   if (input.value !== '') throw new Error('поле не очищено');
   return mock.calls.commit[0];
+});
+
+await check('интерфейс: переключение ветки обновляет зеркало проекта', async () => {
+  const mock = mockServer();
+  const { window, doc, K } = await bootApp({}, { fetchMock: mock.fetchMock });
+  await wait(40);
+  const select = doc.querySelector('#git-branch');
+  const button = doc.querySelector('#btn-git-switch');
+  if (doc.querySelector('#git-branch-controls').hidden) throw new Error('список веток скрыт');
+  select.value = 'feature';
+  select.dispatchEvent(new window.Event('change', { bubbles: true }));
+  button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await wait(100);
+  if (!mock.calls.checkout.includes('feature')) throw new Error('checkout не отправлен');
+  if (K.git.branches.length !== 2) throw new Error('список веток потерян');
+  if (!doc.querySelector('#git-summary').textContent.startsWith('feature')) throw new Error('статус не обновил текущую ветку');
+  const toast = doc.querySelector('.toast--ok');
+  if (!toast || !toast.textContent.includes('feature')) throw new Error('нет уведомления об успешном переключении');
+  return 'ветка feature выбрана';
+});
+
+await check('интерфейс: несохранённый редактор блокирует переключение', async () => {
+  const mock = mockServer();
+  const { window, doc } = await bootApp({}, { fetchMock: mock.fetchMock });
+  await wait(40);
+  const row = doc.querySelector('.tree-row[data-path="a.js"]');
+  row.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  const input = doc.querySelector('#editor-input');
+  input.value = 'черновик';
+  input.dispatchEvent(new window.Event('input', { bubbles: true }));
+  const select = doc.querySelector('#git-branch');
+  select.value = 'feature';
+  select.dispatchEvent(new window.Event('change', { bubbles: true }));
+  doc.querySelector('#btn-git-switch').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await wait(40);
+  if (mock.calls.checkout.length) throw new Error('ветка переключилась с черновиком');
+  const toast = doc.querySelector('.toast--warn');
+  if (!toast || !toast.textContent.includes('несохранёнными правками')) throw new Error('нет предупреждения');
+  return 'черновик сохранён, переключение запрещено';
 });
 
 await check('интерфейс: без git панель честно говорит об этом', async () => {

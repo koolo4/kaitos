@@ -14,6 +14,14 @@ const run = promisify(execFile);
 const TIMEOUT = 15000;
 const MAX_DIFF = 300 * 1024;
 
+export class GitError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'GitError';
+    this.statusCode = 400;
+  }
+}
+
 const STATUS_NAMES = {
   M: 'modified',
   A: 'added',
@@ -78,6 +86,38 @@ export function createGit({ root } = {}) {
     }
     const changes = parseStatus(await git(['status', '--porcelain=v1']));
     return { ok: true, repo: true, branch, changes };
+  }
+
+  async function branches() {
+    const current = await status();
+    if (!current.repo) return { ok: true, repo: false, current: null, branches: [] };
+    const text = await git(['for-each-ref', '--format=%(refname:short)', 'refs/heads']);
+    return {
+      ok: true,
+      repo: true,
+      current: current.branch || null,
+      branches: text.split('\n').map((branch) => branch.trim()).filter(Boolean),
+    };
+  }
+
+  async function checkout(branch) {
+    const name = String(branch || '').trim();
+    if (!name) throw new GitError('Выберите ветку');
+    const current = await status();
+    if (!current.repo) throw new GitError('Это не git-репозиторий');
+    if (current.changes.length) {
+      throw new GitError('Сначала сохраните или закоммитьте изменения — переключение с грязной копией запрещено');
+    }
+    const availableBranches = await branches();
+    if (!availableBranches.branches.includes(name)) throw new GitError(`Локальная ветка не найдена: ${name}`);
+    if (name === current.branch) return { ok: true, branch: name, changed: false };
+    try {
+      await git(['switch', name]);
+    } catch (error) {
+      const output = `${error.stderr || ''}${error.stdout || ''}`.trim();
+      throw new GitError(`Не удалось переключить ветку: ${output || error.message}`);
+    }
+    return { ok: true, branch: name, changed: true };
   }
 
   async function diff(path) {
@@ -153,5 +193,5 @@ export function createGit({ root } = {}) {
     return { ok: true, hash, files: before.length };
   }
 
-  return { git, available, status, diff, log, commit, root };
+  return { git, available, status, branches, checkout, diff, log, commit, root };
 }

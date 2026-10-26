@@ -31,8 +31,11 @@ export function initGit(ctx) {
   const messageInput = $('#git-message');
   const commitButton = $('#btn-git-commit');
   const refreshButton = $('#btn-git-refresh');
+  const branchControls = $('#git-branch-controls');
+  const branchSelect = $('#git-branch');
+  const switchButton = $('#btn-git-switch');
 
-  const state = { changes: [], branch: null, repo: false, busy: false, selected: null };
+  const state = { changes: [], branch: null, branches: [], targetBranch: null, repo: false, busy: false, switching: false, selected: null };
 
   function api() {
     return ctx.api && ctx.api.git;
@@ -84,6 +87,23 @@ export function initGit(ctx) {
       }
     }
 
+    if (branchControls) branchControls.hidden = !state.repo || state.branches.length < 2;
+    if (branchSelect) {
+      const selected = state.targetBranch || state.branch || '';
+      branchSelect.innerHTML = '';
+      for (const branch of state.branches) {
+        const option = document.createElement('option');
+        option.value = branch;
+        option.textContent = branch;
+        branchSelect.append(option);
+      }
+      branchSelect.value = selected;
+      branchSelect.disabled = state.switching || !state.repo;
+    }
+    if (switchButton) {
+      const target = state.targetBranch || state.branch;
+      switchButton.disabled = state.switching || !state.repo || target === state.branch || !state.branches.includes(target);
+    }
     if (commitButton) {
       commitButton.disabled = state.busy || !state.repo || !state.changes.length;
     }
@@ -97,13 +117,22 @@ export function initGit(ctx) {
     return many;
   }
 
+  function dataBranchFallback(branch) {
+    return branch ? [branch] : [];
+  }
+
   async function refresh() {
     if (!enabled()) return;
     try {
-      const data = await api().status();
+      const [data, branchData] = await Promise.all([
+        api().status(),
+        api().branches ? api().branches() : Promise.resolve({ branches: dataBranchFallback(state.branch) }),
+      ]);
       state.repo = Boolean(data.repo);
       state.branch = data.branch;
       state.changes = data.changes || [];
+      state.branches = branchData.branches || [];
+      if (!state.targetBranch || !state.branches.includes(state.targetBranch)) state.targetBranch = state.branch;
       render();
     } catch (error) {
       if (head) head.textContent = `git недоступен: ${error.message}`;
@@ -143,6 +172,53 @@ export function initGit(ctx) {
     }
   }
 
+  function hasDirtyEditor() {
+    return Boolean(ctx.editor && ctx.editor.tabs.some((path) => ctx.editor.isDirty(path)));
+  }
+
+  async function switchBranch() {
+    if (!enabled() || !state.repo || state.switching) return;
+    const branch = branchSelect ? branchSelect.value : state.targetBranch;
+    if (!branch || branch === state.branch) return;
+    if (hasDirtyEditor()) {
+      toast('Сначала сохраните или закройте файлы с несохранёнными правками', 'warn');
+      return;
+    }
+    if (state.changes.length) {
+      toast('Сначала закоммитьте или отмените изменения рабочей копии', 'warn');
+      return;
+    }
+
+    state.switching = true;
+    render();
+    try {
+      if (ctx.fs.flush) {
+        const flushed = await ctx.fs.flush();
+        if (flushed.errors) throw new Error('Не все файлы удалось записать на диск');
+      }
+      const result = await api().checkout(branch);
+      await ctx.fs.load();
+      if (ctx.tree) ctx.tree.render();
+      if (ctx.editor) {
+        for (const path of ctx.editor.tabs) {
+          if (ctx.fs.has(path)) ctx.editor.refresh(path);
+          else ctx.editor.close(path);
+        }
+      }
+      state.targetBranch = result.branch;
+      toast(`Переключено на ветку ${result.branch}`, 'ok');
+      if (ctx.terminal) ctx.terminal.print(`git switch ${result.branch}`, 'ok');
+      await refresh();
+    } catch (error) {
+      toast(`Не удалось переключить ветку: ${error.message}`, 'err');
+      if (ctx.terminal) ctx.terminal.print(`git switch: ${error.message}`, 'err');
+      await refresh();
+    } finally {
+      state.switching = false;
+      render();
+    }
+  }
+
   async function commit() {
     if (!enabled() || state.busy) return;
     const message = (messageInput && messageInput.value.trim()) || '';
@@ -173,6 +249,11 @@ export function initGit(ctx) {
 
   if (commitButton) commitButton.addEventListener('click', commit);
   if (refreshButton) refreshButton.addEventListener('click', refresh);
+  if (branchSelect) branchSelect.addEventListener('change', () => {
+    state.targetBranch = branchSelect.value;
+    render();
+  });
+  if (switchButton) switchButton.addEventListener('click', switchBranch);
   if (messageInput) {
     messageInput.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
@@ -182,5 +263,13 @@ export function initGit(ctx) {
     });
   }
 
-  return { refresh, render, showDiff, commit, get changes() { return state.changes.slice(); } };
+  return {
+    refresh,
+    render,
+    showDiff,
+    commit,
+    switchBranch,
+    get changes() { return state.changes.slice(); },
+    get branches() { return state.branches.slice(); },
+  };
 }

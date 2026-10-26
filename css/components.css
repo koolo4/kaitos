@@ -514,6 +514,17 @@
   white-space: nowrap;
 }
 
+.git-branch-controls {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.git-branch-controls[hidden] { display: none; }
+.git-branch-controls select { min-width: 0; flex: 1 1 auto; padding: 4px 7px; font-size: 12px; }
+.git-branch-controls button { flex: 0 0 auto; }
+
 .git-changes {
   flex: 0 1 auto;
   overflow-y: auto;
