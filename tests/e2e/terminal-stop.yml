@@ -1,0 +1,20 @@
+name: Остановка команды из терминала
+steps:
+  - open: /
+  - wait: 900
+  - expectText:
+      selector: "#status-storage"
+      contains: "диск:"
+  - type:
+      selector: "#terminal-input"
+      text: "node tests/fixtures/long-running.js"
+  - press:
+      selector: "#terminal-input"
+      key: Enter
+  - expectVisible: "#terminal-stop"
+  - click: "#terminal-stop"
+  - wait: 300
+  - expectText:
+      selector: "#terminal-output"
+      contains: "команда остановлена"
+  - expectNoConsoleErrors: true

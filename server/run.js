@@ -41,7 +41,7 @@ export function createRunner({ root, timeoutMs = DEFAULT_TIMEOUT, maxOutput = DE
     return isWindows ? `chcp 65001>nul & ${text}` : text;
   }
 
-  function run(command) {
+  function run(command, { signal = null } = {}) {
     const text = String(command || '').trim();
     if (!text) {
       return Promise.reject(new Error('Пустая команда'));
@@ -49,6 +49,10 @@ export function createRunner({ root, timeoutMs = DEFAULT_TIMEOUT, maxOutput = DE
 
     return new Promise((resolve, reject) => {
       const started = Date.now();
+      if (signal?.aborted) {
+        resolve({ ok: true, command: text, code: null, output: '', truncated: false, timedOut: false, cancelled: true, durationMs: 0 });
+        return;
+      }
       const child = spawn(shellCommand(text), {
         cwd: root,
         shell: true,
@@ -61,6 +65,7 @@ export function createRunner({ root, timeoutMs = DEFAULT_TIMEOUT, maxOutput = DE
       let output = '';
       let truncated = false;
       let timedOut = false;
+      let cancelled = false;
 
       function collect(chunk) {
         if (output.length >= maxOutput) {
@@ -83,20 +88,30 @@ export function createRunner({ root, timeoutMs = DEFAULT_TIMEOUT, maxOutput = DE
       }, timeoutMs);
       if (timer.unref) timer.unref();
 
+      const cancel = () => {
+        if (timedOut || cancelled) return;
+        cancelled = true;
+        killTree(child);
+      };
+      signal?.addEventListener('abort', cancel, { once: true });
+
       child.on('error', (error) => {
         clearTimeout(timer);
+        signal?.removeEventListener('abort', cancel);
         reject(error);
       });
 
-      child.on('close', (code, signal) => {
+      child.on('close', (code, childSignal) => {
         clearTimeout(timer);
+        signal?.removeEventListener('abort', cancel);
         resolve({
           ok: true,
           command: text,
-          code: timedOut || signal === 'SIGKILL' ? null : code,
+          code: timedOut || cancelled || childSignal === 'SIGKILL' ? null : code,
           output: output.replace(/\r\n/g, '\n'),
           truncated,
           timedOut,
+          cancelled,
           durationMs: Date.now() - started,
         });
       });

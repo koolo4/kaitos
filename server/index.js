@@ -147,8 +147,12 @@ export function createServer({ root = ROOT, token = TOKEN, watchFiles = true, al
           fail(res, 400, 'Нужно поле command (непустая строка)');
           return;
         }
-        const result = await runner.run(body.command);
-        send(res, 200, result);
+        const controller = new AbortController();
+        res.on('close', () => {
+          if (!res.writableEnded) controller.abort();
+        });
+        const result = await runner.run(body.command, { signal: controller.signal });
+        if (!res.destroyed) send(res, 200, result);
         return;
       }
 

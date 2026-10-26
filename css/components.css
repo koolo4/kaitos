@@ -202,6 +202,9 @@
   font-size: 12.5px;
 }
 
+#terminal-stop { white-space: nowrap; }
+#terminal-stop[hidden] { display: none; }
+
 /* Чат */
 
 #chat {
