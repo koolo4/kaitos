@@ -1,27 +1,27 @@
 name: Правки от ассистента
 steps:
-  - click: '.tree-row[data-path="src/utils.js"]'
-  - expectText: { selector: '#chat-context', contains: 'src/utils.js' }
-  - eval: { code: "window.Kaitos.llm.setMock(async () => 'Улучшил функцию:\\n\\n```kaitos-write src/utils.js\\nexport function greet(name) {\\n  return `Привет, ${name}!!`;\\n}\\n```\\n'); 'готово'", expect: 'готово' }
+  - click: '.tree-row[data-path="js/tools.js"]'
+  - expectText: { selector: '#chat-context', contains: 'js/tools.js' }
+  - eval: { code: "window.Kaitos.llm.setMock(async () => 'Улучшил функцию:\\n\\n```kaitos-write js/tools.js\\nexport function greet(name) {\\n  return `Привет, ${name}!!`;\\n}\\n```\\n'); 'готово'", expect: 'готово' }
   - type: { selector: '#chat-input', text: 'Предложи правку' }
   - click: '#chat-send'
   - wait: 1600
   - expectCount: { selector: '.edit-card', equals: 1 }
   - expectVisible: '.edit-card .diff'
   - expectCount: { selector: '.edit-card .diff-row--add', min: 1 }
-  - expectText: { selector: '.edit-card__title', contains: 'src/utils.js' }
+  - expectText: { selector: '.edit-card__title', contains: 'js/tools.js' }
   - screenshot: { name: agent-diff, width: 1280 }
   - click: '.edit-card [data-reject-edit]'
   - expectClass: { selector: '.edit-card', has: edit-card--rejected }
-  - eval: { code: "window.Kaitos.fs.read('src/utils.js').includes('!!')", expect: false }
-  - eval: { code: "window.Kaitos.llm.setMock(async () => '```kaitos-write src/agent-new.js\\nexport const NEW = true;\\n```\\n'); 'ok'", expect: 'ok' }
+  - eval: { code: "window.Kaitos.fs.read('js/tools.js').includes('!!')", expect: false }
+  - eval: { code: "window.Kaitos.llm.setMock(async () => '```kaitos-write tests/agent-new.js\\nexport const NEW = true;\\n```\\n'); 'ok'", expect: 'ok' }
   - type: { selector: '#chat-input', text: 'Создай файл' }
   - click: '#chat-send'
   - wait: 1600
   - click: '.chat-msg:last-child [data-apply-edit]'
   - expectClass: { selector: '.chat-msg:last-child .edit-card', has: edit-card--applied }
-  - eval: { code: "window.Kaitos.fs.has('src/agent-new.js')", expect: true }
-  - eval: { code: "window.Kaitos.fs.read('src/agent-new.js').includes('NEW = true')", expect: true }
+  - eval: { code: "window.Kaitos.fs.has('tests/agent-new.js')", expect: true }
+  - eval: { code: "window.Kaitos.fs.read('tests/agent-new.js').includes('NEW = true')", expect: true }
   - eval: { code: "window.Kaitos.llm.setMock(async () => '```kaitos-write ../evil.js\\nbad\\n```\\n'); 'ok'", expect: 'ok' }
   - type: { selector: '#chat-input', text: 'Плохой путь' }
   - click: '#chat-send'
