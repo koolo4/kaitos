@@ -640,3 +640,34 @@
 }
 
 .git-commit .input { flex: 1 1 auto; padding: 4px 8px; font-size: 12px; }
+
+/* Управление целями и задачами проекта */
+.project-dialog { width: min(820px, calc(100vw - 32px)); }
+.project-content { gap: 14px; }
+.project-vision { width: 100%; resize: vertical; min-height: 76px; }
+.project-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.project-section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.project-section-head h3 { margin: 0; font-size: 13px; }
+.project-preview, .project-board { padding-top: 12px; border-top: 1px solid var(--border); }
+.project-preview[hidden] { display: none; }
+.project-goals { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.project-goal { border: 1px solid var(--border); border-radius: 999px; padding: 3px 8px; color: var(--muted); font-size: 11px; }
+.project-preview-tasks { display: grid; gap: 6px; padding-left: 22px; font-size: 12px; }
+.project-task-form { display: flex; gap: 6px; margin-bottom: 10px; }
+.project-task-form .input { flex: 1; min-width: 0; }
+.project-task-list { display: grid; gap: 7px; max-height: 34vh; overflow: auto; }
+.project-task { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 9px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel-2); }
+.project-task__title { font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.project-task__meta { margin-top: 3px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.project-task__controls { display: flex; align-items: center; gap: 5px; }
+.project-task__status { max-width: 130px; padding: 4px 6px; font-size: 11px; }
+.project-task--done { opacity: 0.66; }
+.project-empty { padding: 14px; color: var(--muted); text-align: center; font-size: 12px; }
+.project-task-form .btn-ghost { border: 1px solid var(--border); }
+
+@media (max-width: 700px) {
+  .project-dialog { width: calc(100vw - 16px); max-height: calc(100vh - 16px); }
+  .project-task { grid-template-columns: 1fr; }
+  .project-task__controls { justify-content: space-between; }
+  .project-task__status { flex: 1; max-width: none; }
+}

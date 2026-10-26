@@ -1,0 +1,19 @@
+name: Проектная память, backlog и зависимости задач
+steps:
+  - open: /
+  - wait: 900
+  - eval: { code: "window.Kaitos.updateSettings({provider:'ollama', model:'qwen3.5:9b', baseUrl:'http://localhost:11434'}); window.__pmStep = 0; window.Kaitos.llm.setMock(async () => { window.__pmStep += 1; return window.__pmStep === 1 ? '```kaitos-project\\n{\"summary\":\"MVP проекта\",\"goals\":[\"Запустить каталог\"],\"tasks\":[{\"title\":\"Создать каталог услуг\",\"description\":\"Показать предложения\",\"priority\":\"high\",\"dependsOn\":[]},{\"title\":\"Добавить заказ\",\"description\":\"Сохранить выбор\",\"priority\":\"normal\",\"dependsOn\":[0]}]}\\n```' : '```kaitos-plan\\n{\"title\":\"Добавление каталога\",\"steps\":[\"Обновить интерфейс\"],\"files\":[\"src/main.js\"]}\\n```'; }); 'готово'", expect: 'готово' }
+  - eval: { code: "window.Kaitos.project.store.save({title:'Сервис заказов', vision:'Каталог услуг с оформлением заказа.', goals:[], tasks:[]}); 'память очищена'", expect: 'память очищена' }
+  - click: "#btn-project"
+  - click: "#project-generate"
+  - wait: 700
+  - expectVisible: "#project-preview"
+  - expectCount: { selector: "#project-preview-tasks li", equals: 2 }
+  - click: "#project-import"
+  - expectCount: { selector: ".project-task", equals: 2 }
+  - eval: { code: "const s=document.querySelector('[data-task-status]'); s.value='done'; s.dispatchEvent(new Event('change',{bubbles:true})); !document.querySelectorAll('[data-plan-task]')[1].disabled", expect: true }
+  - click: ".project-task:nth-child(2) [data-plan-task]"
+  - wait: 700
+  - expectText: { selector: ".plan-card__title", contains: "Добавление каталога" }
+  - eval: { code: "window.Kaitos.project.store.get().tasks[1].status", expect: 'in_progress' }
+  - expectNoConsoleErrors:

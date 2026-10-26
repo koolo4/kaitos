@@ -602,14 +602,26 @@ export function initChat(ctx) {
 
   addMessage('assistant', 'Привет! Я ассистент Kaitos. Откройте файл и спросите о нём — подскажу, что внутри.');
 
+  function planTask(text) {
+    state.planMode = true;
+    if (planToggle) planToggle.textContent = 'План: вкл';
+    if (input) input.placeholder = 'Опишите, что нужно спланировать и реализовать…';
+    updateControls();
+    return send(text);
+  }
+
   return {
     send,
+    planTask,
     stop,
     clear,
     addMessage,
     messages,
     get busy() {
       return state.busy;
+    },
+    get planPending() {
+      return Boolean(state.pendingPlan);
     },
   };
 }

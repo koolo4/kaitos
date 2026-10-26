@@ -17,6 +17,7 @@
       </div>
       <nav class="titlebar__nav">
         <button class="btn-ghost" id="btn-palette" title="Палитра команд (Ctrl+K)">Команды</button>
+        <button class="btn-ghost" id="btn-project" type="button">Проект</button>
         <button class="btn-ghost" id="btn-theme" title="Сменить тему">Тема</button>
         <button class="btn-ghost" id="btn-settings" title="Настройки">Настройки</button>
       </nav>
@@ -126,6 +127,60 @@
       <span id="status-model" class="status-item">модель: —</span>
       <span id="status-clock" class="status-item">--:--</span>
     </footer>
+  </div>
+
+  <div id="project-modal" class="modal" hidden>
+    <div class="modal__backdrop" data-close="project"></div>
+    <div class="modal__body project-dialog" role="dialog" aria-modal="true" aria-labelledby="project-title-heading">
+      <div class="modal__head">
+        <div>
+          <h2 id="project-title-heading" class="modal__title">План проекта</h2>
+          <span id="project-save-state" class="muted small">Сохранено в этом браузере</span>
+        </div>
+        <button class="btn-ghost" id="project-close" data-close="project" type="button" aria-label="Закрыть">✕</button>
+      </div>
+      <div class="modal__content project-content">
+        <label class="field">
+          <span class="field__label">Название проекта</span>
+          <input id="project-title" class="input" maxlength="120" placeholder="Например, сервис учёта заказов" />
+        </label>
+        <label class="field">
+          <span class="field__label">Цель и контекст проекта</span>
+          <textarea id="project-vision" class="input project-vision" rows="3" maxlength="4000" placeholder="Для кого этот проект, какую проблему решает и какие ограничения важны?"></textarea>
+        </label>
+        <div class="project-actions">
+          <button id="project-generate" class="btn-primary" type="button">Составить backlog с ИИ</button>
+          <span id="project-ai-status" class="muted small" role="status">ИИ предложит цели и задачи на подтверждение.</span>
+        </div>
+        <section class="project-current-goals">
+          <div class="project-section-head"><h3>Цели</h3><span class="muted small">Уточняйте их в описании проекта</span></div>
+          <div id="project-current-goals" class="project-goals"><span class="muted small">Цели пока не заданы</span></div>
+        </section>
+        <section id="project-preview" class="project-preview" hidden>
+          <div class="project-section-head">
+            <h3>Черновик плана</h3>
+            <span class="muted small">Проверьте перед добавлением</span>
+          </div>
+          <div id="project-preview-goals" class="project-goals"></div>
+          <ol id="project-preview-tasks" class="project-preview-tasks"></ol>
+          <div class="project-actions">
+            <button id="project-import" class="btn-primary btn-sm" type="button">Добавить задачи в проект</button>
+            <button id="project-discard" class="btn-ghost btn-sm" type="button">Отбросить</button>
+          </div>
+        </section>
+        <section class="project-board">
+          <div class="project-section-head">
+            <h3>Задачи</h3>
+            <span id="project-task-count" class="muted small"></span>
+          </div>
+          <form id="project-task-form" class="project-task-form">
+            <input id="project-task-input" class="input" maxlength="180" placeholder="Добавить задачу вручную…" />
+            <button class="btn-ghost" type="submit">Добавить</button>
+          </form>
+          <div id="project-task-list" class="project-task-list"></div>
+        </section>
+      </div>
+    </div>
   </div>
 
   <div id="settings-modal" class="modal" hidden>
