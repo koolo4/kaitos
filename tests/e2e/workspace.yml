@@ -1,12 +1,12 @@
 name: Редактор, чат и терминал
 steps:
-  - click: '.tree-row[data-path="src/utils.js"]'
+  - click: '.tree-row[data-path="docs/ARCHITECTURE.md"]'
   - expectVisible: '#editor-input'
-  - expectText: { selector: '#status-file', equals: 'src/utils.js' }
+  - expectText: { selector: '#status-file', equals: 'docs/ARCHITECTURE.md' }
   - expectCount: { selector: '.tab', equals: 1 }
   - expectCount: { selector: '.tab.is-active', equals: 1 }
-  - eval: { code: "document.querySelector('#editor-input').value.includes('export function greet')", expect: true }
-  - expectText: { selector: '#chat-context', contains: 'src/utils.js' }
+  - eval: { code: "document.querySelector('#editor-input').value.includes('# Архитектура Kaitos')", expect: true }
+  - expectText: { selector: '#chat-context', contains: 'docs/ARCHITECTURE.md' }
   - screenshot: { name: editor, width: 1280 }
   - type: { selector: '#chat-input', text: 'Объясни этот файл' }
   - click: '#chat-send'
@@ -14,12 +14,12 @@ steps:
   - expectCount: { selector: '.chat-msg', min: 3 }
   - expectCount: { selector: '.chat-msg--user', min: 1 }
   - screenshot: { name: chat, width: 1280 }
-  - type: { selector: '#terminal-input', text: 'ls' }
+  - type: { selector: '#terminal-input', text: 'node tests/fixtures/inspect.js ls' }
   - press: Enter
-  - expectText: { selector: '#terminal-output', contains: 'src/' }
-  - type: { selector: '#terminal-input', text: 'cat docs/notes.md' }
+  - expectText: { selector: '#terminal-output', contains: 'js/' }
+  - type: { selector: '#terminal-input', text: 'node tests/fixtures/inspect.js cat docs/ROADMAP.md' }
   - press: Enter
-  - expectText: { selector: '#terminal-output', contains: 'Заметки' }
+  - expectText: { selector: '#terminal-output', contains: 'Что дальше' }
   - click: '#btn-terminal-toggle'
   - expectClass: { selector: '#main-area', has: is-terminal-collapsed }
   - click: '#btn-terminal-toggle'
