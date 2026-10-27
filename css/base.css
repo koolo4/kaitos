@@ -155,7 +155,8 @@ input, select, textarea { font-family: inherit; font-size: inherit; color: inher
   border-right: 1px solid var(--border);
 }
 
-.sidebar-collapsed #sidebar { display: none; }
+.sidebar-collapsed #sidebar > *:not(.panel-head) { display: none; }
+.sidebar-collapsed .panel-head { display: flex; }
 
 .panel-head {
   display: flex;
