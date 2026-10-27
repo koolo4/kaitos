@@ -12,7 +12,7 @@ steps:
   - eval: { code: "document.querySelector('#editor-highlight .tok-selector') !== null", expect: true }
   - eval: { code: "document.querySelector('#editor-highlight .tok-prop') !== null", expect: true }
   - screenshot: { name: highlight-css, width: 1280 }
-  - click: '.tree-row[data-path="package.json"]'
+  - click: '.tree-row[data-path="highlight-number.json"]'
   - eval: { code: "document.querySelector('#editor-highlight .tok-prop') !== null", expect: true }
   - eval: { code: "document.querySelector('#editor-highlight .tok-number') !== null", expect: true }
   - click: '#btn-theme'
