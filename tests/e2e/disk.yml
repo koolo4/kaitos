@@ -10,7 +10,7 @@ steps:
   - expectCount:
       selector: ".tree-row"
       min: 10
-  - click: '.tree-row[data-path="/server/paths.js"]'
+  - click: '.tree-row[data-path="server/paths.js"]'
   - wait: 200
   - expectText:
       selector: "#editor-input"
