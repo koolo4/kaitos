@@ -5,7 +5,7 @@ steps:
   - expectVisible: "#git-panel"
   - expectVisible: "#git-summary"
   - expectVisible: "#git-message"
-  - click: '#btn-gitrefresh'
+  - click: "#btn-git-refresh"
   - wait: 700
   - expectText:
       selector: "#git-summary"
