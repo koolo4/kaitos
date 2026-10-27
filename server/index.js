@@ -8,7 +8,7 @@ import http from 'node:http';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createFileService } from './files.js';
-import { createGit } from './git.js';
+import { createGit, GitError } from './git.js';
 import { createRunner } from './run.js';
 import { createWatcher } from './watch.js';
 import { PathError } from './paths.js';
@@ -147,13 +147,32 @@ export function createServer({ root = ROOT, token = TOKEN, watchFiles = true, al
           fail(res, 400, 'Нужно поле command (непустая строка)');
           return;
         }
-        const result = await runner.run(body.command);
-        send(res, 200, result);
+        const controller = new AbortController();
+        res.on('close', () => {
+          if (!res.writableEnded) controller.abort();
+        });
+        const result = await runner.run(body.command, { signal: controller.signal });
+        if (!res.destroyed) send(res, 200, result);
         return;
       }
 
       if (req.method === 'GET' && url.pathname === '/api/git/status') {
         send(res, 200, await gitApi.status());
+        return;
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/git/branches') {
+        send(res, 200, await gitApi.branches());
+        return;
+      }
+
+      if (req.method === 'POST' && url.pathname === '/api/git/checkout') {
+        const body = await readBody(req);
+        if (typeof body.branch !== 'string') {
+          fail(res, 400, 'Нужно поле branch (строка)');
+          return;
+        }
+        send(res, 200, await gitApi.checkout(body.branch));
         return;
       }
 
@@ -214,9 +233,10 @@ export function createServer({ root = ROOT, token = TOKEN, watchFiles = true, al
 
       fail(res, 404, `Неизвестный маршрут: ${req.method} ${url.pathname}`);
     } catch (error) {
-      const known = error instanceof PathError || error.name === 'PathError';
-      if (!known) console.error('[kaitos] ошибка:', error);
-      fail(res, known ? 400 : 500, error.message || 'Внутренняя ошибка сервера');
+      const knownPath = error instanceof PathError || error.name === 'PathError';
+      const knownGit = error instanceof GitError || error.name === 'GitError';
+      if (!knownPath && !knownGit) console.error('[kaitos] ошибка:', error);
+      fail(res, knownPath ? 400 : knownGit ? error.statusCode || 400 : 500, error.message || 'Внутренняя ошибка сервера');
     }
   });
 

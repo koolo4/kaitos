@@ -5,7 +5,7 @@
  * вложенные кавычки в аргументах оболочки ведут себя иначе, и тест ломался бы не по делу.
  */
 
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { reporter, bootApp, wait } from './harness.mjs';
@@ -21,6 +21,7 @@ writeFileSync(join(root, 'files.js'), "console.log(require('fs').readdirSync('.'
 writeFileSync(join(root, 'exit3.js'), 'process.exit(3);\n', 'utf8');
 writeFileSync(join(root, 'stderr.js'), "console.error('беда'); process.exit(1);\n", 'utf8');
 writeFileSync(join(root, 'sleep.js'), 'setTimeout(() => {}, 5000);\n', 'utf8');
+writeFileSync(join(root, 'delayed-write.js'), "const fs=require('fs');fs.writeFileSync('started.txt','yes');setTimeout(()=>fs.writeFileSync('after-cancel.txt','bad'),900);\n", 'utf8');
 writeFileSync(join(root, 'big.js'), "process.stdout.write('x'.repeat(5000));\n", 'utf8');
 writeFileSync(join(root, 'utf8.js'), "console.log('привет, мир');\n", 'utf8');
 
@@ -71,6 +72,17 @@ await check('таймаут останавливает команду', async ()
   return `${took} мс`;
 });
 
+await check('AbortSignal останавливает команду и дерево процессов', async () => {
+  const controller = new AbortController();
+  const pending = runner.run('node sleep.js', { signal: controller.signal });
+  setTimeout(() => controller.abort(), 150);
+  const data = await pending;
+  if (!data.cancelled) throw new Error('команда не помечена остановленной');
+  if (data.code !== null) throw new Error(`код ${data.code}`);
+  if (data.timedOut) throw new Error('отмечен таймаут вместо отмены');
+  return `остановлена за ${data.durationMs} мс`;
+});
+
 await check('пустая команда отклоняется', async () => {
   try {
     await runner.run('   ');
@@ -96,6 +108,24 @@ await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}/api`;
 const post = (path, payload) =>
   fetch(`${base}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+
+await check('отмена HTTP-запроса убивает запущенную команду', async () => {
+  const controller = new AbortController();
+  const request = fetch(`${base}/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ command: 'node delayed-write.js' }),
+    signal: controller.signal,
+  }).catch(() => null);
+  const startedAt = Date.now();
+  while (!existsSync(join(root, 'started.txt')) && Date.now() - startedAt < 3000) await wait(20);
+  if (!existsSync(join(root, 'started.txt'))) throw new Error('команда не стартовала');
+  controller.abort();
+  await request;
+  await wait(1100);
+  if (existsSync(join(root, 'after-cancel.txt'))) throw new Error('дочерний процесс не был убит');
+  return 'отмена клиента завершила процесс';
+});
 
 await check('POST /api/run выполняет команду', async () => {
   const response = await post('/run', { command: 'node utf8.js' });
@@ -138,6 +168,8 @@ function liveServer() {
     if (full.includes('/api/health')) return json(200, { ok: true, root: '/home/user/term-demo' });
     if (full.includes('/api/changes')) return json(200, { ok: true, seq: 0, changes: [], watching: true });
     if (full.includes('/api/git/status')) return json(200, { ok: true, repo: true, branch: 'main', changes: [] });
+    if (full.includes('/api/git/branches')) return json(200, { ok: true, repo: true, current: 'main', branches: ['main'] });
+    if (full.endsWith('/api/git/checkout')) return json(200, { ok: true, branch: 'main', changed: false });
     if (full.includes('/api/files')) return json(200, { ok: true, files: ['index.js'] });
     if (full.endsWith('/api/run')) {
       const { command } = JSON.parse(options.body);
@@ -187,6 +219,33 @@ await check('интерфейс: ошибка команды видна в те�
   const text = doc.querySelector('#terminal-output').textContent;
   if (!text.includes('нет такой программы')) throw new Error(text.slice(-200));
   return 'ошибка показана';
+});
+
+await check('интерфейс: кнопку Остановить видно и она отменяет команду', async () => {
+  const mock = liveServer();
+  const regularFetch = mock.fetchMock;
+  mock.fetchMock = async (url, options = {}) => {
+    if (String(url).endsWith('/api/run')) {
+      return new Promise((resolve, reject) => {
+        options.signal.addEventListener('abort', () => {
+          const error = new Error('aborted');
+          error.name = 'AbortError';
+          reject(error);
+        }, { once: true });
+      });
+    }
+    return regularFetch(url, options);
+  };
+  const { window, doc } = await bootApp({}, { fetchMock: mock.fetchMock });
+  await typeCommand(window, doc, 'node tests/fixtures/long-running.js');
+  const button = doc.querySelector('#terminal-stop');
+  if (button.hidden) throw new Error('кнопка остановки скрыта');
+  button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await wait(100);
+  if (!doc.querySelector('#terminal-output').textContent.includes('команда остановлена')) throw new Error('нет сообщения об остановке');
+  if (!button.hidden) throw new Error('кнопка осталась видимой');
+  if (doc.querySelector('#terminal-input').disabled) throw new Error('поле ввода осталось выключенным');
+  return 'кнопка остановила команду';
 });
 
 await check('интерфейс: без сервера остаются виртуальные команды', async () => {

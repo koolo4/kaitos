@@ -1,13 +1,13 @@
 name: Подсветка синтаксиса в редакторе
 steps:
-  - click: '.tree-row[data-path="src/utils.js"]'
+  - click: '.tree-row[data-path="js/app.js"]'
   - expectVisible: '#editor-highlight'
   - eval: { code: "document.querySelector('#editor-highlight .tok-keyword') !== null", expect: true }
   - eval: { code: "document.querySelector('#editor-highlight .tok-string') !== null", expect: true }
   - eval: { code: "document.querySelector('#editor-highlight .tok-fn') !== null", expect: true }
   - eval: { code: "document.querySelectorAll('#editor-highlight span[class^=tok-]').length > 5", expect: true }
   - screenshot: { name: highlight-js, width: 1280 }
-  - click: '.tree-row[data-path="styles/theme.css"]'
+  - click: '.tree-row[data-path="css/components.css"]'
   - expectVisible: '#editor-highlight'
   - eval: { code: "document.querySelector('#editor-highlight .tok-selector') !== null", expect: true }
   - eval: { code: "document.querySelector('#editor-highlight .tok-prop') !== null", expect: true }

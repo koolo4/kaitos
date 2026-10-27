@@ -13,6 +13,13 @@ steps:
       contains: "·"
   - expectVisible: "#btn-git-commit"
   - screenshot: git-panel
+  - click:
+      selector: "#btn-git-log"
+  - wait: 300
+  - expectVisible: "#git-log-panel"
+  - expectCount:
+      selector: ".git-log-row"
+      min: 1
   - viewport:
       width: 375
       height: 812

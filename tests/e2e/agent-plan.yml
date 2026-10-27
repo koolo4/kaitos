@@ -1,0 +1,27 @@
+name: Планирование и автономная сборка нескольких файлов
+steps:
+  - open: /
+  - wait: 900
+  - expectText:
+      selector: "#status-storage"
+      contains: "диск:"
+  - eval: { code: "window.__planStep = 0; window.Kaitos.llm.setMock(async () => { window.__planStep += 1; return window.__planStep === 1 ? '```kaitos-plan\\n{\"title\":\"Мини-страница\",\"steps\":[\"Создать HTML\",\"Добавить стили\"],\"files\":[\"tests/fixtures/agent-plan-output.html\",\"tests/fixtures/agent-plan-output.css\"]}\\n```' : 'Готово.\\n```kaitos-write tests/fixtures/agent-plan-output.html\\n<main>План выполнен</main>\\n```\\n```kaitos-write tests/fixtures/agent-plan-output.css\\nmain { color: green; }\\n```'; }); 'модель подготовлена'", expect: 'модель подготовлена' }
+  - click: "#chat-plan-toggle"
+  - type:
+      selector: "#chat-input"
+      text: "Создай простую страницу"
+  - click: "#chat-send"
+  - wait: 500
+  - expectText:
+      selector: ".plan-card"
+      contains: "Мини-страница"
+  - expectCount:
+      selector: ".plan-card__steps li"
+      equals: 2
+  - click: ".plan-card [data-run-plan]"
+  - wait: 700
+  - eval: { code: "window.Kaitos.fs.read('tests/fixtures/agent-plan-output.html').includes('План выполнен')", expect: true }
+  - eval: { code: "window.Kaitos.fs.read('tests/fixtures/agent-plan-output.css').includes('color: green')", expect: true }
+  - run: "node tests/fixtures/inspect.js file-delete tests/fixtures/agent-plan-output.html"
+  - run: "node tests/fixtures/inspect.js file-delete tests/fixtures/agent-plan-output.css"
+  - expectNoConsoleErrors:

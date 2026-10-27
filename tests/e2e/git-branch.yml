@@ -1,0 +1,34 @@
+name: Безопасное переключение ветки из Git-панели
+steps:
+  - open: /
+  - wait: 1000
+  - expectText:
+      selector: "#status-storage"
+      contains: "диск:"
+  - eval:
+      code: "window.__originalBranch = document.querySelector('#git-branch').value; Boolean(window.__originalBranch)"
+      expect: true
+  - run: "node tests/fixtures/inspect.js branch-create e2e-kaitos-preview"
+  - click: "#btn-git-refresh"
+  - wait: 300
+  - eval:
+      code: "Array.from(document.querySelector('#git-branch').options).some(option => option.value === 'e2e-kaitos-preview')"
+      expect: true
+  - eval:
+      code: "document.querySelector('#git-branch').value = 'e2e-kaitos-preview'; document.querySelector('#git-branch').dispatchEvent(new Event('change', { bubbles: true })); true"
+      expect: true
+  - click: "#btn-git-switch"
+  - wait: 500
+  - expectText:
+      selector: "#git-summary"
+      contains: "e2e-kaitos-preview"
+  - eval:
+      code: "document.querySelector('#git-branch').value = window.__originalBranch; document.querySelector('#git-branch').dispatchEvent(new Event('change', { bubbles: true })); true"
+      expect: true
+  - click: "#btn-git-switch"
+  - wait: 500
+  - eval:
+      code: "document.querySelector('#git-summary').textContent.startsWith(window.__originalBranch)"
+      expect: true
+  - run: "node tests/fixtures/inspect.js branch-delete e2e-kaitos-preview"
+  - expectNoConsoleErrors: true

@@ -187,6 +187,39 @@ await check('промпт: система, файл, история, вопро�
   return `${messages.length} сообщений`;
 });
 
+await check('план утверждается и создаёт несколько файлов автономно', async () => {
+  const { window, doc, K } = await bootApp(OLLAMA);
+  let calls = 0;
+  const plan = '```kaitos-plan\n{"title":"Мини-страница","steps":["Создать HTML","Добавить CSS"],"files":["tests/generated/index.html","tests/generated/app.css"]}\n```';
+  const implementation = [
+    'Создал страницу и стили.',
+    '```kaitos-write tests/generated/index.html\n<main>Привет!</main>\n```',
+    '```kaitos-write tests/generated/app.css\nmain { color: green; }\n```',
+    '```kaitos-write README.md\n# неожиданное изменение\n```',
+  ].join('\n');
+  K.llm.setMock(async () => (++calls === 1 ? plan : implementation));
+
+  doc.querySelector('#chat-plan-toggle').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  doc.querySelector('#chat-input').value = 'Создай простую страницу приветствия';
+  doc.querySelector('#chat-form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  await wait(500);
+
+  const card = doc.querySelector('.plan-card');
+  if (!card) throw new Error('план не показан');
+  if (!card.textContent.includes('Мини-страница')) throw new Error(card.textContent);
+  if (K.fs.has('tests/generated/index.html')) throw new Error('изменения применились до подтверждения плана');
+  card.querySelector('[data-run-plan]').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await wait(700);
+
+  if (!K.fs.read('tests/generated/index.html').includes('Привет!')) throw new Error('HTML не создан');
+  if (!K.fs.read('tests/generated/app.css').includes('color: green')) throw new Error('CSS не создан');
+  if (K.fs.read('README.md').includes('неожиданное изменение')) throw new Error('правка вне плана применена');
+  if (!card.classList.contains('plan-card--done')) throw new Error('план не помечен выполненным');
+  if (!card.textContent.includes('Выполнено частично')) throw new Error('не показана блокировка файла вне плана');
+  if (calls !== 2) throw new Error(`вызовов модели ${calls}`);
+  return 'два согласованных файла созданы, лишняя правка заблокирована';
+});
+
 await check('markdown экранирует HTML', async () => {
   const { renderMarkdown } = await import('../js/markdown.js');
   const html = renderMarkdown('<img src=x onerror=alert(1)> и `a < b`');
