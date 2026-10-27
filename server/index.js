@@ -231,6 +231,36 @@ export function createServer({ root = ROOT, token = TOKEN, watchFiles = true, al
         return;
       }
 
+      // Скриншот — безопасная встроенная функция для локального отладочного использования
+      if (req.method === 'POST' && url.pathname === '/api/screenshot') {
+        const body = await readBody(req);
+        let pathFilter;
+        
+        // Фильтрация по пути, если указан в теле запроса или через параметр ?path=
+        if (url.searchParams.get('path')) {
+          pathFilter = url.searchParams.get('path');
+        } else if (body.path && typeof body.path === 'string') {
+          pathFilter = body.path;
+        }
+        
+        try {
+          // Браузер открыт на порту 5173 в этой системе по документации
+          const urlForBrowser = `http://localhost:5173/${pathFilter || ''}`;
+          const browserData = await web_fetch(urlForBrowser, max_chars=2000);
+          
+          // Извлекаем HTML контент из markdown разметки браузера (если нужно)
+          let htmlContent = browserData.content
+            .replace(/<table[^>]*>[^<]*(?:<!--.*-->|[^<])*</table>/g, '')
+            .trim();
+          
+          send(res, 200, { ok: true, screenshot_url: urlForBrowser, content: htmlContent });
+        } catch (error) {
+          fail(res, error.code === 'ECONNREFUSED' ? 404 : 500,
+            `Не удалось получить скриншот: ${error.message}`);
+        }
+        return;
+      }
+
       fail(res, 404, `Неизвестный маршрут: ${req.method} ${url.pathname}`);
     } catch (error) {
       const knownPath = error instanceof PathError || error.name === 'PathError';
