@@ -11,7 +11,7 @@ steps:
       text: "echo проверка-терминала"
   - press:
       selector: "#terminal-input"
-      key: Enter
+-
   - wait: 1200
   - expectText:
       selector: "#terminal-output"

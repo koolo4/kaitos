@@ -8,9 +8,7 @@ steps:
   - type:
       selector: "#terminal-input"
       text: "node tests/fixtures/long-running.js"
-  - press:
-      selector: "#terminal-input"
-      key: Enter
+  - press: Enter
   - expectVisible: "#terminal-stop"
   - click: "#terminal-stop"
   - wait: 300
