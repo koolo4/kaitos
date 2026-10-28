@@ -8,14 +8,12 @@ steps:
   - expectVisible: "#terminal-input"
   - type:
       selector: "#terminal-input"
-      text: "echo проверка-терминала"
-  - press:
-      selector: "#terminal-input"
-      key: Enter
+      text: 'echo проверка-termainala'
+  - press: Enter
   - wait: 1200
   - expectText:
       selector: "#terminal-output"
-      contains: "проверка-терминала"
+      contains: "проверка-terminала"
   - expectText:
       selector: "#terminal-output"
       contains: "готово за"
