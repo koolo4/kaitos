@@ -120,6 +120,38 @@ await check('проект запускает одобренный npm-скрип
   return 'команды требуют явного запуска, сохраняются результаты и сбои; остановка работает';
 });
 
+await check('цикл реализации ограничен тремя попытками на задачу', async () => {
+  const settings = { provider: 'ollama', model: 'qwen3.5:9b', baseUrl: 'http://localhost:11434' };
+  const { window, doc, K } = await bootApp(settings);
+  let calls = 0;
+  K.llm.setMock(async () => {
+    calls += 1;
+    return '```kaitos-plan\n{"title":"Ограниченный план","steps":["Проверить задачу"],"files":["src/main.js"]}\n```';
+  });
+  K.project.store.addTasks([{ id: 'bounded', title: 'Задача с лимитом' }]);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    click(window, doc.querySelector('#btn-project'));
+    const button = doc.querySelector('[data-plan-task="bounded"]');
+    if (!button || button.disabled) throw new Error(`попытка ${attempt + 1} недоступна`);
+    click(window, button);
+    await wait(300);
+    const cancel = doc.querySelector('[data-cancel-plan]');
+    if (!cancel) throw new Error(`план ${attempt + 1} не появился`);
+    click(window, cancel);
+    await wait(20);
+  }
+  click(window, doc.querySelector('#btn-project'));
+  const limited = doc.querySelector('[data-plan-task="bounded"]');
+  if (!limited.disabled || !limited.textContent.includes('исчерпан')) throw new Error('лимит не показан в интерфейсе');
+  K.project.planTask('bounded');
+  await wait(30);
+  if (calls !== 3 || K.project.store.get().tasks[0].attempts !== 3) throw new Error(`лишний цикл: calls=${calls}, attempts=${K.project.store.get().tasks[0].attempts}`);
+  if (!doc.querySelector('#project-activity-list').textContent.includes('цикл 3/3')) throw new Error('журнал не записал цикл');
+  click(window, doc.querySelector('#project-report'));
+  if (doc.querySelector('#project-report-output').hidden) throw new Error('отчёт не показан');
+  return 'три подтверждаемых цикла, четвёртый заблокирован; журнал и отчёт доступны';
+});
+
 await check('ИИ предлагает backlog, пользователь подтверждает, зависимости управляют доступом', async () => {
   const settings = { provider: 'ollama', model: 'qwen3.5:9b', baseUrl: 'http://localhost:11434', temperature: 0.2, maxTokens: 2048 };
   const { window, doc, K, errors } = await bootApp(settings);

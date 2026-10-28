@@ -1,6 +1,6 @@
 /* Проектный менеджер: долговременный контекст, backlog с ИИ и статус задач. */
 
-import { createProjectId, createProjectStore } from './project-store.js';
+import { createProjectId, createProjectStore, PROJECT_LIMITS } from './project-store.js';
 
 const STATUS_LABELS = { todo: 'К выполнению', in_progress: 'В работе', done: 'Готово', blocked: 'Блокер' };
 const PRIORITY_LABELS = { low: 'низкий приоритет', normal: 'обычный приоритет', high: 'высокий приоритет' };
@@ -74,6 +74,9 @@ export function initProject(ctx, { root = '' } = {}) {
   const taskForm = $('#project-task-form');
   const taskInput = $('#project-task-input');
   const saveState = $('#project-save-state');
+  const activityList = $('#project-activity-list');
+  const reportOutput = $('#project-report-output');
+  const reportButton = $('#project-report');
   const storage = ctx.storage || {};
   const store = createProjectStore({ root, name: storage.name || (ctx.fs.name && ctx.fs.name()) });
   let draft = null;
@@ -204,6 +207,30 @@ export function initProject(ctx, { root = '' } = {}) {
     return section;
   }
 
+  function renderActivity() {
+    if (!activityList) return;
+    activityList.replaceChildren();
+    const events = ctx.activity?.list?.({ limit: 40 }) || [];
+    if (!events.length) {
+      const empty = document.createElement('div');
+      empty.className = 'muted small';
+      empty.textContent = 'Действий пока нет.';
+      activityList.append(empty);
+      return;
+    }
+    for (const event of events) {
+      const row = document.createElement('article');
+      row.className = 'project-activity-item';
+      const time = document.createElement('time');
+      time.dateTime = new Date(event.at).toISOString();
+      time.textContent = new Date(event.at).toLocaleString();
+      const summary = document.createElement('div');
+      summary.textContent = event.summary;
+      row.append(time, summary);
+      activityList.append(row);
+    }
+  }
+
   function renderTasks() {
     const state = store.get();
     const checks = availableChecks();
@@ -252,9 +279,11 @@ export function initProject(ctx, { root = '' } = {}) {
       plan.type = 'button';
       plan.className = 'btn-ghost btn-xs';
       plan.dataset.planTask = task.id;
-      plan.textContent = 'В чат';
-      plan.title = dep.ready ? 'Передать задачу агенту для планирования' : 'Сначала завершите зависимые задачи';
-      plan.disabled = !dep.ready;
+      plan.textContent = task.attempts >= PROJECT_LIMITS.MAX_TASK_ATTEMPTS ? 'Лимит исчерпан' : `В чат · ${task.attempts}/${PROJECT_LIMITS.MAX_TASK_ATTEMPTS}`;
+      plan.title = task.attempts >= PROJECT_LIMITS.MAX_TASK_ATTEMPTS
+        ? `Для одной задачи разрешено не больше ${PROJECT_LIMITS.MAX_TASK_ATTEMPTS} циклов планирования; создайте отдельную задачу для нового цикла.`
+        : dep.ready ? 'Передать задачу агенту для планирования' : 'Сначала завершите зависимые задачи';
+      plan.disabled = !dep.ready || task.attempts >= PROJECT_LIMITS.MAX_TASK_ATTEMPTS;
       const remove = document.createElement('button');
       remove.type = 'button';
       remove.className = 'btn-ghost btn-xs';
@@ -274,6 +303,19 @@ export function initProject(ctx, { root = '' } = {}) {
     visionInput.value = state.vision;
     renderGoals();
     renderTasks();
+    renderActivity();
+  }
+
+  function showActivityReport(report) {
+    if (!report || !reportOutput) return;
+    reportOutput.textContent = report.summary;
+    reportOutput.hidden = false;
+    renderActivity();
+  }
+
+  function checkPeriodicReport() {
+    const report = ctx.activity?.maybeCreatePeriodicReport?.();
+    if (report) showActivityReport(report);
   }
 
   function open() {
@@ -348,6 +390,7 @@ export function initProject(ctx, { root = '' } = {}) {
       const result = await ctx.llm.chat({ messages });
       const parsed = parseBacklog(result);
       showDraft(parsed);
+      ctx.activity?.record?.('backlog-draft', `ИИ подготовил черновик backlog: ${parsed.goals.length} целей, ${parsed.tasks.length} задач`);
       aiStatus.textContent = parsed.summary || `Предложено целей: ${parsed.goals.length}, задач: ${parsed.tasks.length}. Проверьте черновик.`;
     } catch (error) {
       aiStatus.textContent = error.message || 'Не удалось составить backlog.';
@@ -371,6 +414,7 @@ export function initProject(ctx, { root = '' } = {}) {
     try {
       store.addGoals(draft.goals);
       store.addTasks(tasks);
+      ctx.activity?.record?.('backlog-imported', `Пользователь добавил в проект ${draft.tasks.length} задач backlog`);
       discardDraft();
       aiStatus.textContent = 'Backlog добавлен в проект. Отмечайте статус по мере выполнения.';
       renderGoals();
@@ -384,6 +428,10 @@ export function initProject(ctx, { root = '' } = {}) {
     const state = store.get();
     const task = state.tasks.find((item) => item.id === id);
     if (!task) return;
+    if (task.attempts >= PROJECT_LIMITS.MAX_TASK_ATTEMPTS) {
+      aiStatus.textContent = `Лимит ${PROJECT_LIMITS.MAX_TASK_ATTEMPTS} циклов для этой задачи исчерпан. Создайте отдельную задачу для следующей попытки.`;
+      return;
+    }
     const dep = dependencyState(task, state.tasks);
     if (!dep.ready) {
       aiStatus.textContent = `Сначала завершите: ${dep.waiting.map((item) => item.title).join(', ')}`;
@@ -393,7 +441,8 @@ export function initProject(ctx, { root = '' } = {}) {
       aiStatus.textContent = 'Сначала завершите текущий запрос и выполните или отмените ожидающий план.';
       return;
     }
-    store.updateTask(id, { status: 'in_progress' });
+    store.updateTask(id, { status: 'in_progress', attempts: task.attempts + 1 });
+    ctx.activity?.record?.('task-cycle', `Запущен цикл ${task.attempts + 1}/${PROJECT_LIMITS.MAX_TASK_ATTEMPTS} для задачи «${task.title}»`);
     renderTasks();
     close();
     const prompt = [
@@ -438,6 +487,7 @@ export function initProject(ctx, { root = '' } = {}) {
     execution.controller = controller;
     renderTasks();
     aiStatus.textContent = `Запускаю ${approved.command}. Команда проекта может выполнять произвольный код — подтверждение дано нажатием кнопки.`;
+    ctx.activity?.record?.('verification-started', `Пользователь подтвердил запуск ${approved.command} для задачи «${task.title}»`);
     const startedAt = Date.now();
     try {
       const result = await ctx.api.run(approved.command, controller ? controller.signal : null);
@@ -450,6 +500,7 @@ export function initProject(ctx, { root = '' } = {}) {
         at: Date.now(),
       };
       store.updateTask(id, { verification: record });
+      ctx.activity?.record?.('verification-result', `${approved.command}: ${record.ok ? 'успешно' : `ошибка, код ${record.code ?? 'нет ответа'}`} (${record.durationMs} мс)`);
       aiStatus.textContent = record.ok
         ? `${approved.command}: проверка прошла. Отметьте задачу готовой после просмотра результата.`
         : `${approved.command}: проверка завершилась с ошибкой. Можно передать её агенту для исправления.`;
@@ -463,6 +514,7 @@ export function initProject(ctx, { root = '' } = {}) {
         at: Date.now(),
       };
       store.updateTask(id, { verification: record });
+      ctx.activity?.record?.('verification-result', `${approved.command}: запуск не выполнен — ${record.output.slice(0, 180)}`);
       aiStatus.textContent = record.output;
     } finally {
       execution.taskId = null;
@@ -490,6 +542,7 @@ export function initProject(ctx, { root = '' } = {}) {
       return;
     }
     store.updateTask(select.dataset.taskStatus, { status: select.value });
+    ctx.activity?.record?.('task-status', `Статус задачи «${task.title}»: ${STATUS_LABELS[select.value]}`);
     renderTasks();
   });
   taskList.addEventListener('click', (event) => {
@@ -506,7 +559,9 @@ export function initProject(ctx, { root = '' } = {}) {
     if (fixButton) fixFailedCheck(fixButton.dataset.fixCheck);
     const removeButton = event.target.closest('[data-remove-task]');
     if (removeButton) {
+      const removed = store.get().tasks.find((task) => task.id === removeButton.dataset.removeTask);
       store.removeTask(removeButton.dataset.removeTask);
+      if (removed) ctx.activity?.record?.('task-removed', `Удалена задача «${removed.title}»`);
       renderTasks();
     }
   });
@@ -515,6 +570,7 @@ export function initProject(ctx, { root = '' } = {}) {
     const title = taskInput.value.trim();
     if (!title) return;
     store.addTasks([{ id: createProjectId(), title, status: 'todo' }]);
+    ctx.activity?.record?.('task-created', `Создана задача «${title}»`);
     taskInput.value = '';
     renderTasks();
   });
@@ -523,6 +579,13 @@ export function initProject(ctx, { root = '' } = {}) {
   generateButton.addEventListener('click', generateBacklog);
   $('#project-import').addEventListener('click', importDraft);
   $('#project-discard').addEventListener('click', discardDraft);
+  reportButton?.addEventListener('click', () => {
+    const report = ctx.activity?.createReport?.();
+    if (report) showActivityReport(report);
+  });
+  ctx.activity?.subscribe?.(renderActivity);
+  checkPeriodicReport();
+  window.setInterval(checkPeriodicReport, 60_000);
   $('#btn-project').addEventListener('click', open);
   $('#project-close').addEventListener('click', close);
   document.addEventListener('keydown', (event) => {

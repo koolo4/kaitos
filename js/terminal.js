@@ -111,6 +111,7 @@ export function initTerminal(ctx) {
       return;
     }
     print(`${prompt()} ${value}`, 'cmd');
+    ctx.activity?.record?.('terminal-command-started', 'Пользователь запустил команду в терминале (текст команды не сохраняется в журнале)');
     print('выполняю…', 'muted');
     const controller = new AbortController();
     activeRun = controller;
@@ -118,6 +119,9 @@ export function initTerminal(ctx) {
     input.disabled = true;
     try {
       const result = await ctx.api.run(value, controller.signal);
+      ctx.activity?.record?.('terminal-command-result', result.cancelled
+        ? 'Команда в терминале остановлена'
+        : result.timedOut ? 'Команда в терминале завершена по таймауту' : `Команда в терминале завершилась с кодом ${result.code}`);
       output.lastElementChild?.remove(); // убираем «выполняю…»
       const text = (result.output || '').replace(/\n$/, '');
       if (text) {
@@ -130,6 +134,7 @@ export function initTerminal(ctx) {
       if (result.truncated) print('вывод обрезан', 'muted');
       if (ctx.git) ctx.git.refresh();
     } catch (error) {
+      ctx.activity?.record?.('terminal-command-failed', `Команда в терминале завершилась ошибкой: ${String(error.message || error).slice(0, 160)}`);
       output.lastElementChild?.remove();
       if (controller.signal.aborted) print('команда остановлена', 'warn');
       else print(`команда не выполнилась: ${error.message}`, 'err');

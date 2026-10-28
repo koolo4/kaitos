@@ -109,6 +109,8 @@
           <div class="chat-actions">
             <span class="muted small">Enter — отправить, Shift+Enter — новая строка</span>
             <div class="chat-actions__buttons">
+              <button id="chat-search-toggle" class="btn-ghost" type="button" aria-pressed="false" title="Искать в интернете через локальный сервер и показать источники">Поиск</button>
+              <button id="chat-screenshot" class="btn-ghost" type="button" title="Снять локальную страницу в Edge/Chrome и передать выбранной модели">Снимок</button>
               <button id="chat-plan-toggle" class="btn-ghost" type="button" aria-pressed="false" title="Сначала составить план, затем выполнить его целиком">План</button>
               <button id="chat-stop" class="btn-ghost" type="button" hidden>Остановить</button>
               <button id="chat-send" class="btn-primary" type="submit">Отправить</button>
@@ -178,6 +180,14 @@
             <button class="btn-ghost" type="submit">Добавить</button>
           </form>
           <div id="project-task-list" class="project-task-list"></div>
+        </section>
+        <section class="project-activity">
+          <div class="project-section-head">
+            <div><h3>Журнал действий</h3><span class="muted small">Локально в этом браузере · периодический отчёт раз в 24 часа, пока приложение открыто</span></div>
+            <button id="project-report" class="btn-ghost btn-xs" type="button">Отчёт за 24 ч</button>
+          </div>
+          <div id="project-report-output" class="project-report-output" role="status" hidden></div>
+          <div id="project-activity-list" class="project-activity-list"></div>
         </section>
       </div>
     </div>

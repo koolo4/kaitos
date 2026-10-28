@@ -4,6 +4,7 @@ const STATUSES = new Set(['todo', 'in_progress', 'done', 'blocked']);
 const PRIORITIES = new Set(['low', 'normal', 'high']);
 const MAX_TASKS = 200;
 const MAX_GOALS = 30;
+const MAX_TASK_ATTEMPTS = 3;
 
 function hashKey(value) {
   let hash = 2166136261;
@@ -39,6 +40,7 @@ function normalizeTask(task = {}) {
     status: STATUSES.has(task.status) ? task.status : 'todo',
     priority: PRIORITIES.has(task.priority) ? task.priority : 'normal',
     dependsOn,
+    attempts: Math.max(0, Math.min(MAX_TASK_ATTEMPTS, Math.floor(Number(task.attempts) || 0))),
     verification: task.verification && typeof task.verification === 'object'
       ? {
         command: cleanText(task.verification.command, 180),
@@ -144,4 +146,4 @@ export function createProjectStore({ root = '', name = 'project', storage = null
   return { key, get, load, save, update, addGoals, addTasks, updateTask, removeTask };
 }
 
-export const PROJECT_LIMITS = { MAX_TASKS, MAX_GOALS };
+export const PROJECT_LIMITS = { MAX_TASKS, MAX_GOALS, MAX_TASK_ATTEMPTS };

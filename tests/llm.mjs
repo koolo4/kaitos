@@ -228,4 +228,139 @@ await check('markdown экранирует HTML', async () => {
   return true;
 });
 
+await check('OpenAI-совместимый провайдер получает изображение как data URL', async () => {
+  const { window, K } = await bootApp(OPENAI);
+  let captured = null;
+  window.fetch = async (url, options) => {
+    captured = { url, options };
+    return { ok: true, json: async () => ({ choices: [{ message: { content: 'На снимке окно редактора.' } }] }) };
+  };
+  const answer = await K.llm.analyzeImage({ base64: 'aGVsbG8=', mimeType: 'image/png', question: 'Что видно?' });
+  const body = JSON.parse(captured.options.body);
+  const content = body.messages[0].content;
+  if (answer !== 'На снимке окно редактора.') throw new Error(answer);
+  if (!captured.url.endsWith('/v1/chat/completions') || body.stream !== false) throw new Error('неверный endpoint или потоковый режим');
+  if (content[0].text !== 'Что видно?' || content[1].image_url.url !== 'data:image/png;base64,aGVsbG8=') throw new Error(JSON.stringify(content));
+  return answer;
+});
+
+await check('Ollama получает изображение в поле images', async () => {
+  const { window, K } = await bootApp(OLLAMA);
+  let payload = null;
+  window.fetch = async (url, options) => {
+    payload = JSON.parse(options.body);
+    return { ok: true, json: async () => ({ message: { content: 'Скриншот читаемый.' } }) };
+  };
+  const answer = await K.llm.analyzeImage({ base64: 'aGVsbG8=', mimeType: 'image/jpeg', question: 'Опиши экран' });
+  if (answer !== 'Скриншот читаемый.') throw new Error(answer);
+  if (payload.messages[0].images[0] !== 'aGVsbG8=' || payload.stream !== false) throw new Error(JSON.stringify(payload));
+  return answer;
+});
+
+await check('веб-поиск показывает только проверяемые источники', async () => {
+  const { window, doc, K } = await bootApp(OPENAI);
+  K.api = { search: async (query) => ({ query, results: [
+    { title: 'Источник', url: 'https://example.org/a', snippet: 'Фрагмент результата' },
+    { title: 'Небезопасно', url: 'javascript:alert(1)', snippet: 'не показывать' },
+  ] }) };
+  K.llm.setMock(async () => 'Краткий ответ со ссылкой [1].');
+  doc.querySelector('#chat-search-toggle').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  doc.querySelector('#chat-input').value = 'Вопрос';
+  doc.querySelector('#chat-form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  await wait(500);
+  const result = doc.querySelector('.search-result__title');
+  if (!result || result.href !== 'https://example.org/a') throw new Error('источник не показан');
+  if (doc.querySelectorAll('.search-result').length !== 1) throw new Error('небезопасная ссылка показана');
+  if (!doc.querySelector('#chat-messages').textContent.includes('[1]')) throw new Error('нет сводки модели');
+  return result.href;
+});
+
+await check('кнопка снимка анализирует только полученное API-изображение', async () => {
+  const { window, doc, K } = await bootApp(OPENAI);
+  K.storage = { mode: 'disk' };
+  let requested = null;
+  K.api = { screenshot: async (options) => {
+    requested = options;
+    return { imageBase64: 'aGVsbG8=', mimeType: 'image/png', width: 800, height: 600 };
+  } };
+  K.llm.setMock(async ({ mode, question, imageBase64 }) => {
+    if (mode !== 'image' || imageBase64 !== 'aGVsbG8=' || !question.includes('Опиши')) throw new Error('неверные аргументы анализа');
+    return 'На снимке — локальная страница.';
+  });
+  doc.querySelector('#chat-screenshot').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await wait(500);
+  if (!requested || requested.url !== 'http://localhost:5173') throw new Error(JSON.stringify(requested));
+  if (!doc.querySelector('.chat-screenshot-preview')) throw new Error('предпросмотр снимка не показан');
+  if (!doc.querySelector('#chat-messages').textContent.includes('На снимке — локальная страница.')) throw new Error('ответ модели отсутствует');
+  return `${requested.width}×${requested.height}`;
+});
+
+await check('ошибка HTTP анализа изображения читаема', async () => {
+  const { window, K } = await bootApp(OPENAI);
+  window.fetch = async () => ({ ok: false, status: 413, text: async () => 'payload too large' });
+  try {
+    await K.llm.analyzeImage({ base64: 'aGVsbG8=', mimeType: 'image/png' });
+    throw new Error('HTTP-ошибка не показана');
+  } catch (error) {
+    if (error.code !== 'http' || !error.message.includes('413') || !error.detail.includes('too large')) throw new Error(JSON.stringify(error));
+    return error.message;
+  }
+});
+
+await check('провайдер явно сообщает, если модель не принимает изображение', async () => {
+  const { window, K } = await bootApp(OPENAI);
+  window.fetch = async () => ({ ok: false, status: 400, text: async () => 'model does not support image input' });
+  try {
+    await K.llm.analyzeImage({ base64: 'aGVsbG8=' });
+    throw new Error('ошибка поддержки изображения скрыта');
+  } catch (error) {
+    if (error.code !== 'unsupported-image' || !error.message.includes('vision') || !error.detail.includes('support image')) throw new Error(error.message);
+    return error.message;
+  }
+});
+
+await check('анализ изображения ограничивает размер и длину вопроса', async () => {
+  const { window, K } = await bootApp(OPENAI);
+  let sent = false;
+  window.fetch = async () => { sent = true; return { ok: true, json: async () => ({}) }; };
+  const tooLarge = 'A'.repeat(7 * 1024 * 1024);
+  try {
+    await K.llm.analyzeImage({ base64: tooLarge });
+    throw new Error('слишком большое изображение принято');
+  } catch (error) {
+    if (error.code !== 'image-too-large') throw new Error(error.code);
+  }
+  try {
+    await K.llm.analyzeImage({ base64: 'aGVsbG8=', question: 'x'.repeat(2001) });
+    throw new Error('слишком длинный вопрос принят');
+  } catch (error) {
+    if (error.code !== 'prompt-too-long') throw new Error(error.code);
+  }
+  if (sent) throw new Error('невалидное изображение отправили провайдеру');
+  return 'больше 5 МиБ и вопрос длиннее 2000 символов отклонены до fetch';
+});
+
+await check('модель без поддержки vision возвращает понятную ошибку', async () => {
+  const { window, K } = await bootApp(OPENAI);
+  window.fetch = async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: '' } }] }) });
+  try {
+    await K.llm.analyzeImage({ base64: 'aGVsbG8=' });
+    throw new Error('пустой ответ принят');
+  } catch (error) {
+    if (error.code !== 'provider' || !error.message.includes('vision')) throw new Error(error.message);
+    return error.message;
+  }
+});
+
+await check('анализ изображения отклоняет неподдерживаемый формат', async () => {
+  const { K } = await bootApp(OPENAI);
+  try {
+    await K.llm.analyzeImage({ base64: 'aGVsbG8=', mimeType: 'image/gif' });
+    throw new Error('GIF принят');
+  } catch (error) {
+    if (error.code !== 'invalid-image') throw new Error(error.code);
+    return error.code;
+  }
+});
+
 process.exit(result() ? 1 : 0);

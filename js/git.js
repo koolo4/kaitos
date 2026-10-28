@@ -202,6 +202,7 @@ export function initGit(ctx) {
         if (flushed.errors) throw new Error('Не все файлы удалось записать на диск');
       }
       const result = await api().checkout(branch);
+      ctx.activity?.record?.('git-branch', `Переключена ветка ${result.branch}`);
       await ctx.fs.load();
       if (ctx.tree) ctx.tree.render();
       if (ctx.editor) {
@@ -288,6 +289,7 @@ export function initGit(ctx) {
     render();
     try {
       const result = await api().commit(message);
+      ctx.activity?.record?.('git-commit', `Создан коммит ${result.hash} (${result.files} файлов): ${message.slice(0, 180)}`);
       if (messageInput) messageInput.value = '';
       state.logLoaded = false;
       if (diffBox) diffBox.hidden = true;

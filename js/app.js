@@ -14,6 +14,7 @@ import { initSettings, loadSettings, saveSettings, applySettings } from './setti
 import { initPalette } from './palette.js';
 import { initGit } from './git.js';
 import { initProject } from './project.js';
+import { createActivityLog } from './activity-log.js';
 import { createLlm } from './llm.js';
 import { createApi } from './api.js';
 import { createRemoteFs } from './fs-remote.js';
@@ -123,6 +124,7 @@ async function boot() {
   const projectRoot = storage.root || '';
   delete storage.root;
   ctx.storage = storage;
+  ctx.activity = createActivityLog({ root: projectRoot, name: ctx.fs.name() });
 
   ctx.llm = createLlm(ctx);
   ctx.editor = initEditor(ctx);
@@ -172,6 +174,7 @@ async function boot() {
 
   startWatchingDisk(storage);
 
+  ctx.activity?.record('app-started', `Kaitos запущен: ${storage.mode === 'disk' ? `локальный проект ${storage.name}` : 'демо-режим'}`);
   ctx.ready = true;
   if (ctx.git) ctx.git.refresh();
   window.Kaitos = ctx;

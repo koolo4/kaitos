@@ -272,6 +272,92 @@ export function createLlm(ctx) {
     }
   }
 
+  /* Анализ локального снимка: данные изображения отправляются только выбранному провайдеру. */
+  async function analyzeImage({ base64, mimeType = 'image/png', question = 'Опиши содержимое изображения.', signal = null } = {}) {
+    const cfg = config();
+    if (cfg.provider === 'none') {
+      throw new LlmError('no-provider', 'Модель не выбрана. Откройте «Настройки» и укажите провайдера и модель.');
+    }
+    if (!['image/png', 'image/jpeg'].includes(mimeType)) {
+      throw new LlmError('invalid-image', 'Поддерживаются только PNG и JPEG.');
+    }
+    const encoded = String(base64 || '').trim();
+    const maxBytes = 5 * 1024 * 1024;
+    if (encoded.length > Math.ceil(maxBytes / 3) * 4) {
+      throw new LlmError('image-too-large', 'Изображение больше 5 МиБ.');
+    }
+    const padding = encoded.endsWith('==') ? 2 : encoded.endsWith('=') ? 1 : 0;
+    const contentLength = encoded.length - padding;
+    const validBase64 = encoded.length > 0
+      && encoded.length % 4 === 0
+      && !/[^A-Za-z0-9+/=]/.test(encoded)
+      && !encoded.slice(0, contentLength).includes('=')
+      && (padding === 0 || (padding === 1 && contentLength % 4 === 3) || (padding === 2 && contentLength % 4 === 2));
+    if (!validBase64) throw new LlmError('invalid-image', 'Изображение имеет неверный формат base64.');
+    const imageBytes = encoded.length * 3 / 4 - padding;
+    if (imageBytes > maxBytes) throw new LlmError('image-too-large', 'Изображение больше 5 МиБ.');
+    const prompt = String(question || '').trim();
+    if (!prompt) throw new LlmError('invalid-prompt', 'Укажите, что нужно проверить на снимке.');
+    if (prompt.length > 2000) throw new LlmError('prompt-too-long', 'Вопрос к изображению не должен превышать 2000 символов.');
+
+    if (mock) {
+      const pending = Promise.resolve(mock({
+        mode: 'image', imageBase64: encoded, mimeType, question: prompt,
+        model: cfg.model, provider: cfg.provider, signal,
+      }));
+      pending.catch(() => {});
+      const answer = signal ? await raceAbort(pending, signal) : await pending;
+      return String(answer ?? '');
+    }
+
+    const messages = cfg.provider === 'ollama'
+      ? [{ role: 'user', content: prompt, images: [encoded] }]
+      : [{ role: 'user', content: [
+        { type: 'text', text: prompt },
+        { type: 'image_url', image_url: { url: `data:${mimeType};base64,${encoded}` } },
+      ] }];
+    const body = cfg.provider === 'ollama'
+      ? { model: cfg.model, stream: false, messages, options: { temperature: cfg.temperature, num_predict: cfg.maxTokens } }
+      : { model: cfg.model, stream: false, messages, temperature: cfg.temperature, max_tokens: cfg.maxTokens };
+
+    let response;
+    try {
+      response = await fetch(endpoint(cfg), {
+        method: 'POST', headers: headers(cfg), body: JSON.stringify(body), signal: signal || undefined,
+      });
+    } catch (error) {
+      throw describeError(error, cfg);
+    }
+    if (!response.ok) {
+      let detail = '';
+      try { detail = (await response.text()).slice(0, 400); } catch (error) { detail = ''; }
+      if ([400, 415, 422].includes(response.status)) {
+        throw new LlmError('unsupported-image', `Провайдер отклонил изображение (HTTP ${response.status}). Проверьте, что выбранная модель поддерживает vision.`, detail);
+      }
+      throw new LlmError('http', `Сервер модели ответил ${response.status}.`, detail);
+    }
+    let data;
+    try {
+      data = await response.json();
+    } catch (error) {
+      throw new LlmError('provider', 'Сервер модели вернул некорректный JSON.');
+    }
+    if (data.error) {
+      const detail = String(data.error.message || data.error).slice(0, 400);
+      if (/(image|vision|multimodal|изображ|картин)/i.test(detail)) {
+        throw new LlmError('unsupported-image', 'Провайдер или выбранная модель не поддерживает анализ изображений. Выберите vision-модель.', detail);
+      }
+      throw new LlmError('provider', `Ошибка провайдера: ${detail}`, detail);
+    }
+    const text = cfg.provider === 'ollama'
+      ? data.message?.content
+      : data.choices?.[0]?.message?.content;
+    if (typeof text !== 'string' || !text.trim()) {
+      throw new LlmError('provider', 'Модель не вернула анализ изображения. Проверьте, что выбранная модель поддерживает vision.');
+    }
+    return text;
+  }
+
   /* Проверка соединения: короткий запрос к модели. */
   async function test() {
     const cfg = config();
@@ -309,6 +395,7 @@ export function createLlm(ctx) {
 
   return {
     chat,
+    analyzeImage,
     test,
     setMock,
     clearMock,

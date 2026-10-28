@@ -420,7 +420,14 @@
   white-space: pre-wrap;
 }
 
-.chat-actions__buttons { display: flex; align-items: center; gap: 6px; }
+.chat-actions__buttons { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
+.search-results { display: grid; gap: 8px; margin-top: 10px; }
+.search-result { padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+.search-result__title { display: block; color: var(--accent); font-weight: 650; text-decoration: none; }
+.search-result__title:hover { text-decoration: underline; }
+.search-result__url { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.search-result__snippet { margin-top: 5px; color: var(--text); font-size: 12px; }
+.chat-screenshot-preview { display: block; max-width: min(100%, 560px); max-height: 320px; margin-top: 8px; border: 1px solid var(--border); border-radius: 8px; object-fit: contain; background: #111; }
 #chat-plan-toggle[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 #chat-plan-toggle:disabled { opacity: 0.55; cursor: not-allowed; }
 .btn-ghost[hidden] { display: none; }
@@ -656,6 +663,12 @@
 .project-task-form { display: flex; gap: 6px; margin-bottom: 10px; }
 .project-task-form .input { flex: 1; min-width: 0; }
 .project-task-list { display: grid; gap: 7px; max-height: 34vh; overflow: auto; }
+.project-activity { padding-top: 12px; border-top: 1px solid var(--border); }
+.project-activity-list { display: grid; gap: 6px; max-height: 24vh; overflow: auto; }
+.project-activity-item { padding: 7px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel-2); }
+.project-activity-item time { display: block; margin-bottom: 3px; color: var(--muted); font-size: 10px; }
+.project-activity-item div { font-size: 11px; overflow-wrap: anywhere; }
+.project-report-output { margin: 8px 0; padding: 10px; border-left: 3px solid var(--accent); border-radius: 4px; background: var(--panel-2); font-size: 12px; white-space: pre-wrap; }
 .project-task { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 9px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel-2); }
 .project-task__title { font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
 .project-task__meta { margin-top: 3px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }

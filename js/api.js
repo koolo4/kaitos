@@ -89,6 +89,10 @@ export function createApi({ baseUrl = '/api', token = '', timeoutMs = 4000 } = {
     removeFile: (path) => request(`/file?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
     /* Изменения файлов на диске после отметки since. */
     changes: (since = 0) => request(`/changes?since=${encodeURIComponent(since)}`, { timeout: 2500 }),
+    search: (query, signal = null) => request(`/search?q=${encodeURIComponent(query)}`, { timeout: 15000, signal }),
+    screenshot: (options, signal = null) => request('/browser/screenshot', {
+      method: 'POST', body: options, timeout: 30000, signal,
+    }),
     /* Настоящие команды в папке проекта (терминал). */
     run: (command, signal = null) => request('/run', { method: 'POST', body: { command }, timeout: 70000, signal }),
     request,
