@@ -65,6 +65,11 @@ await check('список веток и безопасное переключе�
   if (!switched.changed || switched.branch !== 'feature/kaitos-test') throw new Error(JSON.stringify(switched));
   if ((await api.status()).branch !== 'feature/kaitos-test') throw new Error('ветка не переключилась');
 
+  writeFileSync(join(root, 'a.js'), 'export const a = "feature";\n', 'utf8');
+  writeFileSync(join(root, 'feature-only.js'), 'export const featureOnly = true;\n', 'utf8');
+  quietGit(['add', '-A']);
+  quietGit(['commit', '-qm', 'Изменения feature']);
+
   writeFileSync(join(root, 'a.js'), 'грязная правка\n', 'utf8');
   try {
     await api.checkout(original);
@@ -72,10 +77,14 @@ await check('список веток и безопасное переключе�
   } catch (error) {
     if (!error.message.includes('Сначала сохраните')) throw new Error(error.message);
   }
-  writeFileSync(join(root, 'a.js'), 'export const a = 1;\n', 'utf8');
+  writeFileSync(join(root, 'a.js'), 'export const a = "feature";\n', 'utf8');
   await api.checkout(original);
   if ((await api.status()).branch !== original) throw new Error('не вернулись на исходную ветку');
-  return `${listed.branches.length} ветки; грязная копия защищена`;
+  const comparison = await api.compare('feature/kaitos-test');
+  const byPath = Object.fromEntries(comparison.changes.map((change) => [change.path, change.status]));
+  if (comparison.from !== original || comparison.to !== 'feature/kaitos-test') throw new Error(JSON.stringify(comparison));
+  if (byPath['a.js'] !== 'modified' || byPath['feature-only.js'] !== 'added') throw new Error(JSON.stringify(comparison.changes));
+  return `${listed.branches.length} ветки; изменения сравнены; грязная копия защищена`;
 });
 
 await check('правка и новый файл видны в статусе', async () => {
@@ -158,13 +167,20 @@ await check('HTTP: статус, diff, коммит', async () => {
   if (!status.repo) throw new Error('нет репозитория');
   const branches = await (await fetch(`${base}/git/branches`)).json();
   if (!branches.branches.includes(status.branch)) throw new Error(`нет ${status.branch}`);
+  const target = branches.branches.find((branch) => branch !== status.branch);
+  const comparisonResponse = await fetch(`${base}/git/compare?branch=${encodeURIComponent(target)}`);
+  const comparison = await comparisonResponse.json();
+  if (comparisonResponse.status !== 200 || !comparison.changes.some((change) => change.path === 'feature-only.js')) {
+    throw new Error(JSON.stringify(comparison));
+  }
+  const invalidComparison = await fetch(`${base}/git/compare?branch=missing`);
+  if (invalidComparison.status !== 400) throw new Error(`неизвестная ветка: ${invalidComparison.status}`);
   const invalid = await fetch(`${base}/git/checkout`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ branch: 'kaitos-branch-does-not-exist' }),
   });
   if (invalid.status !== 400) throw new Error(`ошибка ветки: ${invalid.status}`);
-  const target = branches.branches.find((branch) => branch !== status.branch);
   const switchResponse = await fetch(`${base}/git/checkout`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -210,7 +226,7 @@ await new Promise((resolve) => server.close(resolve));
 function mockServer({ repo = true, changes = [], diff = '' } = {}) {
   const store = { 'a.js': 'export const a = 1;\n' };
   const current = { branch: 'main' };
-  const calls = { commit: [], diff: [], checkout: [], log: 0 };
+  const calls = { commit: [], diff: [], checkout: [], compare: [], log: 0 };
   const fetchMock = async (url, options = {}) => {
     const full = String(url);
     const method = options.method || 'GET';
@@ -221,6 +237,14 @@ function mockServer({ repo = true, changes = [], diff = '' } = {}) {
     if (full.includes('/api/files')) return json(200, { ok: true, files: Object.keys(store) });
     if (full.includes('/api/git/status')) return json(200, { ok: true, repo, branch: current.branch, changes });
     if (full.includes('/api/git/branches')) return json(200, { ok: true, repo, current: current.branch, branches: ['main', 'feature'] });
+    if (full.includes('/api/git/compare')) {
+      const branch = new URL(full, 'http://localhost').searchParams.get('branch');
+      calls.compare.push(branch);
+      return json(200, {
+        ok: true, from: current.branch, to: branch,
+        changes: [{ path: 'a.js', status: 'modified' }, { path: 'feature-only.js', status: 'added' }],
+      });
+    }
     if (full.endsWith('/api/git/checkout')) {
       const body = JSON.parse(options.body);
       calls.checkout.push(body.branch);
@@ -330,6 +354,11 @@ await check('интерфейс: переключение ветки обнов�
   if (doc.querySelector('#git-branch-controls').hidden) throw new Error('список веток скрыт');
   select.value = 'feature';
   select.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await wait(30);
+  const preview = doc.querySelector('#git-branch-preview');
+  if (preview.hidden || !preview.textContent.includes('feature-only.js')) throw new Error(preview.textContent || 'предпросмотр не показан');
+  if (!mock.calls.compare.includes('feature')) throw new Error('сравнение не запрошено');
+  if (button.disabled) throw new Error('переключение не разблокировано после сравнения');
   button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   await wait(100);
   if (!mock.calls.checkout.includes('feature')) throw new Error('checkout не отправлен');

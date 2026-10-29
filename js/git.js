@@ -33,12 +33,17 @@ export function initGit(ctx) {
   const refreshButton = $('#btn-git-refresh');
   const branchControls = $('#git-branch-controls');
   const branchSelect = $('#git-branch');
+  const branchPreview = $('#git-branch-preview');
   const switchButton = $('#btn-git-switch');
   const logButton = $('#btn-git-log');
   const logPanel = $('#git-log-panel');
   const logList = $('#git-log');
 
-  const state = { changes: [], branch: null, branches: [], targetBranch: null, repo: false, busy: false, switching: false, logLoaded: false, logOpen: false, selected: null };
+  const state = {
+    changes: [], branch: null, branches: [], targetBranch: null, repo: false, busy: false, switching: false,
+    logLoaded: false, logOpen: false, selected: null, compare: null, compareBusy: false, compareError: null,
+    compareRequestId: 0,
+  };
 
   function api() {
     return ctx.api && ctx.api.git;
@@ -107,8 +112,11 @@ export function initGit(ctx) {
     }
     if (switchButton) {
       const target = state.targetBranch || state.branch;
-      switchButton.disabled = state.switching || !state.repo || target === state.branch || !state.branches.includes(target);
+      const compared = state.compare?.from === state.branch && state.compare?.to === target;
+      switchButton.disabled = state.switching || !state.repo || target === state.branch
+        || !state.branches.includes(target) || state.compareBusy || !compared || Boolean(state.compareError);
     }
+    renderBranchPreview();
     if (commitButton) {
       commitButton.disabled = state.busy || !state.repo || !state.changes.length;
     }
@@ -126,6 +134,89 @@ export function initGit(ctx) {
     return branch ? [branch] : [];
   }
 
+  function renderBranchPreview() {
+    if (!branchPreview) return;
+    branchPreview.replaceChildren();
+    const target = state.targetBranch || state.branch;
+    branchPreview.hidden = !state.repo || !target || target === state.branch || state.branches.length < 2;
+    if (branchPreview.hidden) return;
+
+    const summary = document.createElement('div');
+    summary.className = 'git-branch-preview__summary';
+    if (state.compareBusy) {
+      summary.textContent = `Сравниваю ${state.branch} → ${target}…`;
+      branchPreview.append(summary);
+      return;
+    }
+    if (state.compareError) {
+      summary.textContent = `Не удалось сравнить ветки: ${state.compareError}`;
+      branchPreview.append(summary);
+      return;
+    }
+    if (!state.compare || state.compare.from !== state.branch || state.compare.to !== target) {
+      summary.textContent = 'Сравнение веток ещё не загружено';
+      branchPreview.append(summary);
+      return;
+    }
+
+    const changes = state.compare.changes || [];
+    summary.textContent = changes.length
+      ? `${state.branch} → ${target}: ${changes.length} ${plural(changes.length, 'файл', 'файла', 'файлов')}`
+      : `${state.branch} → ${target}: файлы не отличаются`;
+    branchPreview.append(summary);
+    if (!changes.length) return;
+
+    const list = document.createElement('ul');
+    list.className = 'git-branch-preview__files';
+    for (const change of changes.slice(0, 20)) {
+      const item = document.createElement('li');
+      const status = document.createElement('span');
+      status.className = `git-branch-preview__status git-branch-preview__status--${change.status}`;
+      status.textContent = LETTERS[change.status] || 'M';
+      const path = document.createElement('span');
+      path.textContent = change.status === 'renamed' && change.oldPath
+        ? `${change.oldPath} → ${change.path}`
+        : change.path;
+      item.append(status, path);
+      list.append(item);
+    }
+    if (changes.length > 20) {
+      const rest = document.createElement('li');
+      rest.className = 'muted small';
+      rest.textContent = `и ещё ${changes.length - 20}`;
+      list.append(rest);
+    }
+    branchPreview.append(list);
+  }
+
+  async function compareBranch(target) {
+    const name = String(target || '');
+    const requestId = ++state.compareRequestId;
+    state.compare = null;
+    state.compareError = null;
+    if (!name || name === state.branch) {
+      state.compareBusy = false;
+      render();
+      return;
+    }
+    state.compareBusy = true;
+    render();
+    try {
+      if (!api().compare) throw new Error('Сравнение веток недоступно');
+      const data = await api().compare(name);
+      if (requestId !== state.compareRequestId) return;
+      state.compare = data;
+    } catch (error) {
+      if (requestId !== state.compareRequestId) return;
+      state.compareError = error.message;
+    } finally {
+      if (requestId === state.compareRequestId) {
+        state.compareBusy = false;
+        render();
+      }
+    }
+  }
+
   async function refresh() {
     if (!enabled()) return;
     try {
@@ -133,12 +224,20 @@ export function initGit(ctx) {
         api().status(),
         api().branches ? api().branches() : Promise.resolve({ branches: dataBranchFallback(state.branch) }),
       ]);
+      const previousBranch = state.branch;
       state.repo = Boolean(data.repo);
       state.branch = data.branch;
       state.changes = data.changes || [];
       state.branches = branchData.branches || [];
-      if (!state.targetBranch || !state.branches.includes(state.targetBranch)) state.targetBranch = state.branch;
+      if (previousBranch !== state.branch || !state.targetBranch || !state.branches.includes(state.targetBranch)) {
+        state.targetBranch = state.branch;
+        state.compare = null;
+        state.compareError = null;
+        state.compareBusy = false;
+        state.compareRequestId += 1;
+      }
       render();
+      if (state.targetBranch && state.targetBranch !== state.branch) await compareBranch(state.targetBranch);
     } catch (error) {
       if (head) head.textContent = `git недоступен: ${error.message}`;
     }
@@ -191,6 +290,10 @@ export function initGit(ctx) {
     }
     if (state.changes.length) {
       toast('Сначала закоммитьте или отмените изменения рабочей копии', 'warn');
+      return;
+    }
+    if (state.compareBusy || state.compareError || state.compare?.from !== state.branch || state.compare?.to !== branch) {
+      toast('Сначала дождитесь сравнения выбранных веток', 'warn');
       return;
     }
 
@@ -312,7 +415,7 @@ export function initGit(ctx) {
   if (refreshButton) refreshButton.addEventListener('click', refresh);
   if (branchSelect) branchSelect.addEventListener('change', () => {
     state.targetBranch = branchSelect.value;
-    render();
+    void compareBranch(state.targetBranch);
   });
   if (switchButton) switchButton.addEventListener('click', switchBranch);
   if (logButton) logButton.addEventListener('click', toggleLog);

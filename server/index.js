@@ -442,6 +442,11 @@ export function createServer({
         return;
       }
 
+      if (req.method === 'GET' && url.pathname === '/api/git/compare') {
+        send(res, 200, await gitApi.compare(url.searchParams.get('branch')));
+        return;
+      }
+
       if (req.method === 'POST' && url.pathname === '/api/git/checkout') {
         const body = await readBody(req);
         if (typeof body.branch !== 'string') {

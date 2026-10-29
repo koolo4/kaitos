@@ -100,6 +100,34 @@ export function createGit({ root } = {}) {
     };
   }
 
+  async function compare(branch) {
+    const name = String(branch || '').trim();
+    if (!name) throw new GitError('Выберите ветку для сравнения');
+    const availableBranches = await branches();
+    if (!availableBranches.repo) throw new GitError('Это не git-репозиторий');
+    if (!availableBranches.branches.includes(name)) throw new GitError(`Локальная ветка не найдена: ${name}`);
+
+    const current = availableBranches.current;
+    if (name === current) return { ok: true, from: current, to: name, changes: [] };
+    const text = await git(['diff', '--name-status', '-z', '--find-renames', 'HEAD', `refs/heads/${name}`, '--']);
+    const parts = text.split('\0');
+    const changes = [];
+    for (let index = 0; index < parts.length;) {
+      const code = parts[index++];
+      if (!code) continue;
+      const status = code[0];
+      if (status === 'R' || status === 'C') {
+        const oldPath = parts[index++];
+        const path = parts[index++];
+        changes.push({ path, oldPath, status: STATUS_NAMES[status] || 'modified' });
+      } else {
+        changes.push({ path: parts[index++], status: STATUS_NAMES[status] || 'modified' });
+      }
+      if (changes.length > 1000) throw new GitError('Слишком много отличающихся файлов (лимит 1000)');
+    }
+    return { ok: true, from: current, to: name, changes };
+  }
+
   async function checkout(branch) {
     const name = String(branch || '').trim();
     if (!name) throw new GitError('Выберите ветку');
@@ -193,5 +221,5 @@ export function createGit({ root } = {}) {
     return { ok: true, hash, files: before.length };
   }
 
-  return { git, available, status, branches, checkout, diff, log, commit, root };
+  return { git, available, status, branches, compare, checkout, diff, log, commit, root };
 }

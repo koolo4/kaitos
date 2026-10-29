@@ -73,6 +73,7 @@ export function createApi({ baseUrl = '/api', token = '', timeoutMs = 4000 } = {
   const git = {
     status: () => request('/git/status', { timeout: 15000 }),
     branches: () => request('/git/branches', { timeout: 15000 }),
+    compare: (branch) => request(`/git/compare?branch=${encodeURIComponent(branch)}`, { timeout: 15000 }),
     checkout: (branch) => request('/git/checkout', { method: 'POST', body: { branch }, timeout: 30000 }),
     diff: (path) => request(`/git/diff?path=${encodeURIComponent(path || '')}`, { timeout: 15000 }),
     log: (limit = 10) => request(`/git/log?limit=${limit}`, { timeout: 15000 }),

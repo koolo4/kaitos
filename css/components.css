@@ -551,6 +551,23 @@
 .git-branch-controls select { min-width: 0; flex: 1 1 auto; padding: 4px 7px; font-size: 12px; }
 .git-branch-controls button { flex: 0 0 auto; }
 
+.git-branch-preview {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.git-branch-preview[hidden] { display: none; }
+.git-branch-preview__summary { line-height: 1.4; }
+.git-branch-preview__files { display: grid; gap: 3px; margin: 5px 0 0; padding: 0; list-style: none; }
+.git-branch-preview__files li { display: flex; gap: 6px; min-width: 0; }
+.git-branch-preview__files li > span:last-child { overflow-wrap: anywhere; }
+.git-branch-preview__status { flex: 0 0 14px; font-family: var(--font-code); font-weight: 700; }
+.git-branch-preview__status--added { color: var(--ok); }
+.git-branch-preview__status--deleted { color: var(--err); }
+.git-branch-preview__status--renamed { color: var(--accent); }
+
 .git-changes {
   flex: 0 1 auto;
   overflow-y: auto;
