@@ -11,7 +11,9 @@ export function initTerminal(ctx) {
   const output = $('#terminal-output');
   const form = $('#terminal-form');
   const input = $('#terminal-input');
+  const stopButton = $('#terminal-stop');
   const history = [];
+  let activeRun = null;
   let historyIndex = 0;
 
   function print(text, kind = '') {
@@ -105,26 +107,43 @@ export function initTerminal(ctx) {
       return;
     }
     if (value === 'help') {
-      print('Терминал выполняет настоящие команды в папке проекта (sh или cmd). Ctrl+L — очистить.', 'muted');
+      print('Терминал выполняет настоящие команды в папке проекта (sh или cmd). Во время команды можно нажать «Остановить». Ctrl+L — очистить.', 'muted');
       return;
     }
     print(`${prompt()} ${value}`, 'cmd');
+    ctx.activity?.record?.('terminal-command-started', 'Пользователь запустил команду в терминале (текст команды не сохраняется в журнале)');
     print('выполняю…', 'muted');
+    const controller = new AbortController();
+    activeRun = controller;
+    stopButton.hidden = false;
+    input.disabled = true;
     try {
-      const result = await ctx.api.run(value);
+      const result = await ctx.api.run(value, controller.signal);
+      ctx.activity?.record?.('terminal-command-result', result.cancelled
+        ? 'Команда в терминале остановлена'
+        : result.timedOut ? 'Команда в терминале завершена по таймауту' : `Команда в терминале завершилась с кодом ${result.code}`);
       output.lastElementChild?.remove(); // убираем «выполняю…»
       const text = (result.output || '').replace(/\n$/, '');
       if (text) {
         for (const line of text.split('\n')) print(line);
       }
-      if (result.timedOut) print('остановлено по таймауту (60 с)', 'err');
+      if (result.cancelled) print('команда остановлена', 'warn');
+      else if (result.timedOut) print('остановлено по таймауту (60 с)', 'err');
       else if (result.code) print(`код выхода: ${result.code}`, 'err');
       else print(`готово за ${result.durationMs} мс`, 'ok');
       if (result.truncated) print('вывод обрезан', 'muted');
       if (ctx.git) ctx.git.refresh();
     } catch (error) {
+      ctx.activity?.record?.('terminal-command-failed', `Команда в терминале завершилась ошибкой: ${String(error.message || error).slice(0, 160)}`);
       output.lastElementChild?.remove();
-      print(`команда не выполнилась: ${error.message}`, 'err');
+      if (controller.signal.aborted) print('команда остановлена', 'warn');
+      else print(`команда не выполнилась: ${error.message}`, 'err');
+    } finally {
+      if (activeRun === controller) activeRun = null;
+      stopButton.hidden = true;
+      stopButton.disabled = false;
+      input.disabled = false;
+      input.focus();
     }
   }
 
@@ -152,8 +171,14 @@ export function initTerminal(ctx) {
 
   form.addEventListener('submit', (event) => {
     event.preventDefault();
+    if (activeRun) return;
     run(input.value);
     input.value = '';
+  });
+
+  stopButton.addEventListener('click', () => {
+    if (activeRun) stopButton.disabled = true;
+    activeRun?.abort();
   });
 
   input.addEventListener('keydown', (event) => {

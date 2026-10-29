@@ -106,8 +106,8 @@ export function createRemoteFs({ api, name = 'project' }) {
         continue;
       }
       try {
-        if (change.type === 'removed' && base.has(path)) {
-          base.remove(path);
+        if (change.type === 'removed') {
+          if (base.has(path)) base.remove(path);
           applied.push({ path, type: 'removed' });
           continue;
         }

@@ -17,6 +17,7 @@
       </div>
       <nav class="titlebar__nav">
         <button class="btn-ghost" id="btn-palette" title="Палитра команд (Ctrl+K)">Команды</button>
+        <button class="btn-ghost" id="btn-project" type="button">Проект</button>
         <button class="btn-ghost" id="btn-theme" title="Сменить тему">Тема</button>
         <button class="btn-ghost" id="btn-settings" title="Настройки">Настройки</button>
       </nav>
@@ -39,9 +40,18 @@
           <div class="git-head">
             <span class="panel-title">Git</span>
             <span id="git-summary" class="git-summary">—</span>
+            <button class="btn-ghost btn-xs" id="btn-git-log" type="button" aria-expanded="false">Журнал</button>
             <button class="btn-ghost btn-xs" id="btn-git-refresh" title="Обновить статус">⟳</button>
           </div>
+          <div id="git-branch-controls" class="git-branch-controls" hidden>
+            <select id="git-branch" class="input input--sm" aria-label="Выбрать ветку"></select>
+            <button class="btn-ghost btn-xs" id="btn-git-switch" type="button">Перейти</button>
+          </div>
+          <div id="git-branch-preview" class="git-branch-preview" hidden aria-live="polite"></div>
           <div id="git-changes" class="git-changes"></div>
+          <div id="git-log-panel" class="git-log-panel" hidden>
+            <div id="git-log" class="git-log"></div>
+          </div>
           <div id="git-diff" class="git-diff" hidden></div>
           <div class="git-commit">
             <input id="git-message" class="input input--sm" type="text" placeholder="Сообщение коммита (Ctrl+Enter)" />
@@ -77,6 +87,7 @@
             <form id="terminal-form" class="terminal-line">
               <span class="terminal-prompt" id="terminal-prompt">kaitos:~/demo $</span>
               <input id="terminal-input" class="terminal-input" autocomplete="off" spellcheck="false" />
+              <button id="terminal-stop" class="btn-ghost btn-xs" type="button" hidden>Остановить</button>
             </form>
           </div>
         </section>
@@ -99,6 +110,9 @@
           <div class="chat-actions">
             <span class="muted small">Enter — отправить, Shift+Enter — новая строка</span>
             <div class="chat-actions__buttons">
+              <button id="chat-search-toggle" class="btn-ghost" type="button" aria-pressed="false" title="Искать в интернете через локальный сервер и показать источники">Поиск</button>
+              <button id="chat-screenshot" class="btn-ghost" type="button" title="Снять локальную страницу в Edge/Chrome и передать выбранной модели">Снимок</button>
+              <button id="chat-plan-toggle" class="btn-ghost" type="button" aria-pressed="false" title="Сначала составить план, затем выполнить его целиком">План</button>
               <button id="chat-stop" class="btn-ghost" type="button" hidden>Остановить</button>
               <button id="chat-send" class="btn-primary" type="submit">Отправить</button>
             </div>
@@ -116,6 +130,68 @@
       <span id="status-model" class="status-item">модель: —</span>
       <span id="status-clock" class="status-item">--:--</span>
     </footer>
+  </div>
+
+  <div id="project-modal" class="modal" hidden>
+    <div class="modal__backdrop" data-close="project"></div>
+    <div class="modal__body project-dialog" role="dialog" aria-modal="true" aria-labelledby="project-title-heading">
+      <div class="modal__head">
+        <div>
+          <h2 id="project-title-heading" class="modal__title">План проекта</h2>
+          <span id="project-save-state" class="muted small">Сохранено в этом браузере</span>
+        </div>
+        <button class="btn-ghost" id="project-close" data-close="project" type="button" aria-label="Закрыть">✕</button>
+      </div>
+      <div class="modal__content project-content">
+        <label class="field">
+          <span class="field__label">Название проекта</span>
+          <input id="project-title" class="input" maxlength="120" placeholder="Например, сервис учёта заказов" />
+        </label>
+        <label class="field">
+          <span class="field__label">Цель и контекст проекта</span>
+          <textarea id="project-vision" class="input project-vision" rows="3" maxlength="4000" placeholder="Для кого этот проект, какую проблему решает и какие ограничения важны?"></textarea>
+        </label>
+        <div class="project-actions">
+          <button id="project-generate" class="btn-primary" type="button">Составить backlog с ИИ</button>
+          <span id="project-ai-status" class="muted small" role="status">ИИ предложит цели и задачи на подтверждение.</span>
+        </div>
+        <section class="project-current-goals">
+          <div class="project-section-head"><h3>Цели</h3><span class="muted small">Уточняйте их в описании проекта</span></div>
+          <div id="project-current-goals" class="project-goals"><span class="muted small">Цели пока не заданы</span></div>
+        </section>
+        <section id="project-preview" class="project-preview" hidden>
+          <div class="project-section-head">
+            <h3>Черновик плана</h3>
+            <span class="muted small">Проверьте перед добавлением</span>
+          </div>
+          <div id="project-preview-goals" class="project-goals"></div>
+          <ol id="project-preview-tasks" class="project-preview-tasks"></ol>
+          <div class="project-actions">
+            <button id="project-import" class="btn-primary btn-sm" type="button">Добавить задачи в проект</button>
+            <button id="project-discard" class="btn-ghost btn-sm" type="button">Отбросить</button>
+          </div>
+        </section>
+        <section class="project-board">
+          <div class="project-section-head">
+            <h3>Задачи</h3>
+            <span id="project-task-count" class="muted small"></span>
+          </div>
+          <form id="project-task-form" class="project-task-form">
+            <input id="project-task-input" class="input" maxlength="180" placeholder="Добавить задачу вручную…" />
+            <button class="btn-ghost" type="submit">Добавить</button>
+          </form>
+          <div id="project-task-list" class="project-task-list"></div>
+        </section>
+        <section class="project-activity">
+          <div class="project-section-head">
+            <div><h3>Журнал действий</h3><span class="muted small">Локально в этом браузере · периодический отчёт раз в 24 часа, пока приложение открыто</span></div>
+            <button id="project-report" class="btn-ghost btn-xs" type="button">Отчёт за 24 ч</button>
+          </div>
+          <div id="project-report-output" class="project-report-output" role="status" hidden></div>
+          <div id="project-activity-list" class="project-activity-list"></div>
+        </section>
+      </div>
+    </div>
   </div>
 
   <div id="settings-modal" class="modal" hidden>

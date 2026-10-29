@@ -19,13 +19,20 @@ function trimSlash(url) {
 export function createApi({ baseUrl = '/api', token = '', timeoutMs = 4000 } = {}) {
   const base = trimSlash(baseUrl || '/api');
 
-  async function request(path, { method = 'GET', body = null, timeout = timeoutMs } = {}) {
+  async function request(path, { method = 'GET', body = null, timeout = timeoutMs, signal: externalSignal = null } = {}) {
     const headers = {};
     if (body !== null) headers['Content-Type'] = 'application/json';
     if (token) headers['X-Kaitos-Token'] = token;
 
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
-    const timer = controller ? setTimeout(() => controller.abort(), timeout) : null;
+    let timedOut = false;
+    const timer = controller ? setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeout) : null;
+    const abortFromCaller = () => controller?.abort();
+    externalSignal?.addEventListener('abort', abortFromCaller, { once: true });
+    if (externalSignal?.aborted) abortFromCaller();
 
     let response;
     try {
@@ -33,13 +40,17 @@ export function createApi({ baseUrl = '/api', token = '', timeoutMs = 4000 } = {
         method,
         headers,
         body: body === null ? undefined : JSON.stringify(body),
-        signal: controller ? controller.signal : undefined,
+        signal: controller ? controller.signal : externalSignal || undefined,
       });
     } catch (error) {
-      if (error && error.name === 'AbortError') throw new ApiError('timeout', `Сервер не ответил за ${timeout} мс`);
+      if (error && error.name === 'AbortError') {
+        if (externalSignal?.aborted) throw new ApiError('cancelled', 'Команда остановлена');
+        if (timedOut) throw new ApiError('timeout', `Сервер не ответил за ${timeout} мс`);
+      }
       throw new ApiError('network', 'Локальный сервер недоступен');
     } finally {
       if (timer) clearTimeout(timer);
+      externalSignal?.removeEventListener('abort', abortFromCaller);
     }
 
     let payload = null;
@@ -61,6 +72,9 @@ export function createApi({ baseUrl = '/api', token = '', timeoutMs = 4000 } = {
 
   const git = {
     status: () => request('/git/status', { timeout: 15000 }),
+    branches: () => request('/git/branches', { timeout: 15000 }),
+    compare: (branch) => request(`/git/compare?branch=${encodeURIComponent(branch)}`, { timeout: 15000 }),
+    checkout: (branch) => request('/git/checkout', { method: 'POST', body: { branch }, timeout: 30000 }),
     diff: (path) => request(`/git/diff?path=${encodeURIComponent(path || '')}`, { timeout: 15000 }),
     log: (limit = 10) => request(`/git/log?limit=${limit}`, { timeout: 15000 }),
     commit: (message) => request('/git/commit', { method: 'POST', body: { message }, timeout: 30000 }),
@@ -76,8 +90,12 @@ export function createApi({ baseUrl = '/api', token = '', timeoutMs = 4000 } = {
     removeFile: (path) => request(`/file?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
     /* Изменения файлов на диске после отметки since. */
     changes: (since = 0) => request(`/changes?since=${encodeURIComponent(since)}`, { timeout: 2500 }),
+    search: (query, signal = null) => request(`/search?q=${encodeURIComponent(query)}`, { timeout: 15000, signal }),
+    screenshot: (options, signal = null) => request('/browser/screenshot', {
+      method: 'POST', body: options, timeout: 30000, signal,
+    }),
     /* Настоящие команды в папке проекта (терминал). */
-    run: (command) => request('/run', { method: 'POST', body: { command }, timeout: 70000 }),
+    run: (command, signal = null) => request('/run', { method: 'POST', body: { command }, timeout: 70000, signal }),
     request,
   };
 }

@@ -31,8 +31,19 @@ export function initGit(ctx) {
   const messageInput = $('#git-message');
   const commitButton = $('#btn-git-commit');
   const refreshButton = $('#btn-git-refresh');
+  const branchControls = $('#git-branch-controls');
+  const branchSelect = $('#git-branch');
+  const branchPreview = $('#git-branch-preview');
+  const switchButton = $('#btn-git-switch');
+  const logButton = $('#btn-git-log');
+  const logPanel = $('#git-log-panel');
+  const logList = $('#git-log');
 
-  const state = { changes: [], branch: null, repo: false, busy: false, selected: null };
+  const state = {
+    changes: [], branch: null, branches: [], targetBranch: null, repo: false, busy: false, switching: false,
+    logLoaded: false, logOpen: false, selected: null, compare: null, compareBusy: false, compareError: null,
+    compareRequestId: 0,
+  };
 
   function api() {
     return ctx.api && ctx.api.git;
@@ -84,6 +95,28 @@ export function initGit(ctx) {
       }
     }
 
+    if (branchControls) branchControls.hidden = !state.repo || state.branches.length < 2;
+    if (logPanel) logPanel.hidden = !state.repo || !state.logOpen;
+    if (logButton) logButton.setAttribute('aria-expanded', String(state.logOpen));
+    if (branchSelect) {
+      const selected = state.targetBranch || state.branch || '';
+      branchSelect.innerHTML = '';
+      for (const branch of state.branches) {
+        const option = document.createElement('option');
+        option.value = branch;
+        option.textContent = branch;
+        branchSelect.append(option);
+      }
+      branchSelect.value = selected;
+      branchSelect.disabled = state.switching || !state.repo;
+    }
+    if (switchButton) {
+      const target = state.targetBranch || state.branch;
+      const compared = state.compare?.from === state.branch && state.compare?.to === target;
+      switchButton.disabled = state.switching || !state.repo || target === state.branch
+        || !state.branches.includes(target) || state.compareBusy || !compared || Boolean(state.compareError);
+    }
+    renderBranchPreview();
     if (commitButton) {
       commitButton.disabled = state.busy || !state.repo || !state.changes.length;
     }
@@ -97,14 +130,114 @@ export function initGit(ctx) {
     return many;
   }
 
+  function dataBranchFallback(branch) {
+    return branch ? [branch] : [];
+  }
+
+  function renderBranchPreview() {
+    if (!branchPreview) return;
+    branchPreview.replaceChildren();
+    const target = state.targetBranch || state.branch;
+    branchPreview.hidden = !state.repo || !target || target === state.branch || state.branches.length < 2;
+    if (branchPreview.hidden) return;
+
+    const summary = document.createElement('div');
+    summary.className = 'git-branch-preview__summary';
+    if (state.compareBusy) {
+      summary.textContent = `Сравниваю ${state.branch} → ${target}…`;
+      branchPreview.append(summary);
+      return;
+    }
+    if (state.compareError) {
+      summary.textContent = `Не удалось сравнить ветки: ${state.compareError}`;
+      branchPreview.append(summary);
+      return;
+    }
+    if (!state.compare || state.compare.from !== state.branch || state.compare.to !== target) {
+      summary.textContent = 'Сравнение веток ещё не загружено';
+      branchPreview.append(summary);
+      return;
+    }
+
+    const changes = state.compare.changes || [];
+    summary.textContent = changes.length
+      ? `${state.branch} → ${target}: ${changes.length} ${plural(changes.length, 'файл', 'файла', 'файлов')}`
+      : `${state.branch} → ${target}: файлы не отличаются`;
+    branchPreview.append(summary);
+    if (!changes.length) return;
+
+    const list = document.createElement('ul');
+    list.className = 'git-branch-preview__files';
+    for (const change of changes.slice(0, 20)) {
+      const item = document.createElement('li');
+      const status = document.createElement('span');
+      status.className = `git-branch-preview__status git-branch-preview__status--${change.status}`;
+      status.textContent = LETTERS[change.status] || 'M';
+      const path = document.createElement('span');
+      path.textContent = change.status === 'renamed' && change.oldPath
+        ? `${change.oldPath} → ${change.path}`
+        : change.path;
+      item.append(status, path);
+      list.append(item);
+    }
+    if (changes.length > 20) {
+      const rest = document.createElement('li');
+      rest.className = 'muted small';
+      rest.textContent = `и ещё ${changes.length - 20}`;
+      list.append(rest);
+    }
+    branchPreview.append(list);
+  }
+
+  async function compareBranch(target) {
+    const name = String(target || '');
+    const requestId = ++state.compareRequestId;
+    state.compare = null;
+    state.compareError = null;
+    if (!name || name === state.branch) {
+      state.compareBusy = false;
+      render();
+      return;
+    }
+    state.compareBusy = true;
+    render();
+    try {
+      if (!api().compare) throw new Error('Сравнение веток недоступно');
+      const data = await api().compare(name);
+      if (requestId !== state.compareRequestId) return;
+      state.compare = data;
+    } catch (error) {
+      if (requestId !== state.compareRequestId) return;
+      state.compareError = error.message;
+    } finally {
+      if (requestId === state.compareRequestId) {
+        state.compareBusy = false;
+        render();
+      }
+    }
+  }
+
   async function refresh() {
     if (!enabled()) return;
     try {
-      const data = await api().status();
+      const [data, branchData] = await Promise.all([
+        api().status(),
+        api().branches ? api().branches() : Promise.resolve({ branches: dataBranchFallback(state.branch) }),
+      ]);
+      const previousBranch = state.branch;
       state.repo = Boolean(data.repo);
       state.branch = data.branch;
       state.changes = data.changes || [];
+      state.branches = branchData.branches || [];
+      if (previousBranch !== state.branch || !state.targetBranch || !state.branches.includes(state.targetBranch)) {
+        state.targetBranch = state.branch;
+        state.compare = null;
+        state.compareError = null;
+        state.compareBusy = false;
+        state.compareRequestId += 1;
+      }
       render();
+      if (state.targetBranch && state.targetBranch !== state.branch) await compareBranch(state.targetBranch);
     } catch (error) {
       if (head) head.textContent = `git недоступен: ${error.message}`;
     }
@@ -143,6 +276,110 @@ export function initGit(ctx) {
     }
   }
 
+  function hasDirtyEditor() {
+    return Boolean(ctx.editor && ctx.editor.tabs.some((path) => ctx.editor.isDirty(path)));
+  }
+
+  async function switchBranch() {
+    if (!enabled() || !state.repo || state.switching) return;
+    const branch = branchSelect ? branchSelect.value : state.targetBranch;
+    if (!branch || branch === state.branch) return;
+    if (hasDirtyEditor()) {
+      toast('Сначала сохраните или закройте файлы с несохранёнными правками', 'warn');
+      return;
+    }
+    if (state.changes.length) {
+      toast('Сначала закоммитьте или отмените изменения рабочей копии', 'warn');
+      return;
+    }
+    if (state.compareBusy || state.compareError || state.compare?.from !== state.branch || state.compare?.to !== branch) {
+      toast('Сначала дождитесь сравнения выбранных веток', 'warn');
+      return;
+    }
+
+    state.switching = true;
+    render();
+    try {
+      if (ctx.fs.flush) {
+        const flushed = await ctx.fs.flush();
+        if (flushed.errors) throw new Error('Не все файлы удалось записать на диск');
+      }
+      const result = await api().checkout(branch);
+      ctx.activity?.record?.('git-branch', `Переключена ветка ${result.branch}`);
+      await ctx.fs.load();
+      if (ctx.tree) ctx.tree.render();
+      if (ctx.editor) {
+        for (const path of ctx.editor.tabs) {
+          if (ctx.fs.has(path)) ctx.editor.refresh(path);
+          else ctx.editor.close(path);
+        }
+      }
+      state.targetBranch = result.branch;
+      state.logLoaded = false;
+      toast(`Переключено на ветку ${result.branch}`, 'ok');
+      if (ctx.terminal) ctx.terminal.print(`git switch ${result.branch}`, 'ok');
+      await refresh();
+      if (state.logOpen) await loadLog();
+    } catch (error) {
+      toast(`Не удалось переключить ветку: ${error.message}`, 'err');
+      if (ctx.terminal) ctx.terminal.print(`git switch: ${error.message}`, 'err');
+      await refresh();
+    } finally {
+      state.switching = false;
+      render();
+    }
+  }
+
+  function renderLog(commits) {
+    if (!logList) return;
+    logList.innerHTML = '';
+    if (!commits.length) {
+      const empty = document.createElement('div');
+      empty.className = 'git-empty';
+      empty.textContent = 'Коммитов пока нет';
+      logList.append(empty);
+      return;
+    }
+    for (const commit of commits) {
+      const row = document.createElement('div');
+      row.className = 'git-log-row';
+      const subject = document.createElement('div');
+      subject.className = 'git-log-subject';
+      subject.textContent = commit.subject || '(без сообщения)';
+      const meta = document.createElement('div');
+      meta.className = 'git-log-meta';
+      const hash = document.createElement('span');
+      hash.className = 'git-log-hash';
+      hash.textContent = commit.hash || '—';
+      const author = document.createElement('span');
+      author.textContent = commit.author || 'неизвестный автор';
+      const date = document.createElement('span');
+      date.textContent = commit.date || '';
+      meta.append(hash, document.createTextNode(' · '), author, document.createTextNode(' · '), date);
+      row.append(subject, meta);
+      logList.append(row);
+    }
+  }
+
+  async function loadLog() {
+    if (!logList) return;
+    logList.textContent = 'Загружаю журнал…';
+    try {
+      const data = await api().log(20);
+      state.logLoaded = true;
+      renderLog(data.commits || []);
+    } catch (error) {
+      state.logLoaded = false;
+      logList.textContent = `Не удалось загрузить журнал: ${error.message}`;
+    }
+  }
+
+  async function toggleLog() {
+    state.logOpen = !state.logOpen;
+    render();
+    if (state.logOpen && !state.logLoaded) await loadLog();
+  }
+
   async function commit() {
     if (!enabled() || state.busy) return;
     const message = (messageInput && messageInput.value.trim()) || '';
@@ -155,13 +392,16 @@ export function initGit(ctx) {
     render();
     try {
       const result = await api().commit(message);
+      ctx.activity?.record?.('git-commit', `Создан коммит ${result.hash} (${result.files} файлов): ${message.slice(0, 180)}`);
       if (messageInput) messageInput.value = '';
+      state.logLoaded = false;
       if (diffBox) diffBox.hidden = true;
       state.selected = null;
       toast(`Коммит ${result.hash}: ${result.files} файлов`, 'ok');
       if (ctx.terminal) ctx.terminal.print(`git commit ${result.hash} — ${message}`, 'ok');
-      // коммит меняет файлы .git — обновляем дерево и статус
+      // коммит меняет .git: обновляем статус, журнал и дерево.
       await refresh();
+      if (state.logOpen) await loadLog();
     } catch (error) {
       toast(`Коммит не удался: ${error.message}`, 'err');
       if (ctx.terminal) ctx.terminal.print(`git commit: ${error.message}`, 'err');
@@ -173,6 +413,12 @@ export function initGit(ctx) {
 
   if (commitButton) commitButton.addEventListener('click', commit);
   if (refreshButton) refreshButton.addEventListener('click', refresh);
+  if (branchSelect) branchSelect.addEventListener('change', () => {
+    state.targetBranch = branchSelect.value;
+    void compareBranch(state.targetBranch);
+  });
+  if (switchButton) switchButton.addEventListener('click', switchBranch);
+  if (logButton) logButton.addEventListener('click', toggleLog);
   if (messageInput) {
     messageInput.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
@@ -182,5 +428,14 @@ export function initGit(ctx) {
     });
   }
 
-  return { refresh, render, showDiff, commit, get changes() { return state.changes.slice(); } };
+  return {
+    refresh,
+    render,
+    showDiff,
+    commit,
+    switchBranch,
+    loadLog,
+    get changes() { return state.changes.slice(); },
+    get branches() { return state.branches.slice(); },
+  };
 }

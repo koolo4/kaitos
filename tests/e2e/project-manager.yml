@@ -1,0 +1,27 @@
+name: Проектная память, backlog, зависимости и проверка
+steps:
+  - open: /
+  - wait: 900
+  - eval: { code: "window.Kaitos.updateSettings({provider:'ollama', model:'qwen3.5:9b', baseUrl:'http://localhost:11434'}); window.__pmStep = 0; window.Kaitos.llm.setMock(async () => { window.__pmStep += 1; if (window.__pmStep === 1) return '```kaitos-project\\n{\"summary\":\"MVP проекта\",\"goals\":[\"Запустить каталог\"],\"tasks\":[{\"title\":\"Создать каталог услуг\",\"description\":\"Показать предложения\",\"priority\":\"high\",\"dependsOn\":[]},{\"title\":\"Добавить заказ\",\"description\":\"Сохранить выбор\",\"priority\":\"normal\",\"dependsOn\":[0]}]}\\n```'; if (window.__pmStep === 2) return '```kaitos-plan\\n{\"title\":\"Добавление каталога\",\"steps\":[\"Обновить интерфейс\"],\"files\":[\"tests/fixtures/project-manager-generated.js\"]}\\n```'; return '```kaitos-write tests/fixtures/project-manager-generated.js\\nexport const projectManagerE2e = true;\\n```'; }); 'готово'", expect: 'готово' }
+  - eval: { code: "window.Kaitos.project.store.save({title:'Сервис заказов', vision:'Каталог услуг с оформлением заказа.', goals:[], tasks:[]}); 'память очищена'", expect: 'память очищена' }
+  - click: "#btn-project"
+  - click: "#project-generate"
+  - wait: 700
+  - expectVisible: "#project-preview"
+  - expectCount: { selector: "#project-preview-tasks li", equals: 2 }
+  - click: "#project-import"
+  - expectCount: { selector: ".project-task", equals: 2 }
+  - eval: { code: "const s=document.querySelector('[data-task-status]'); s.value='done'; s.dispatchEvent(new Event('change',{bubbles:true})); !document.querySelectorAll('[data-plan-task]')[1].disabled", expect: true }
+  - click: ".project-task:nth-child(2) [data-plan-task]"
+  - wait: 700
+  - expectText: { selector: ".plan-card__title", contains: "Добавление каталога" }
+  - click: ".plan-card [data-run-plan]"
+  - wait: 800
+  - eval: { code: "window.Kaitos.fs.read('tests/fixtures/project-manager-generated.js').includes('projectManagerE2e')", expect: true }
+  - click: "#btn-project"
+  - eval: { code: "const c=document.querySelector('.project-task:nth-child(2)'); c.querySelector('[data-check-select]').value='npm run build'; 'команда выбрана'", expect: 'команда выбрана' }
+  - click: ".project-task:nth-child(2) [data-run-check]"
+  - wait: 3000
+  - expectText: { selector: ".project-task:nth-child(2) .project-check-result", contains: "Проверка прошла" }
+  - run: "node tests/fixtures/inspect.js file-delete tests/fixtures/project-manager-generated.js"
+  - expectNoConsoleErrors:

@@ -17,6 +17,7 @@ mkdirSync(join(root, 'src'), { recursive: true });
 mkdirSync(join(root, 'node_modules'), { recursive: true });
 writeFileSync(join(root, 'src/main.js'), "export const x = 1;\n", 'utf8');
 writeFileSync(join(root, 'README.md'), '# Демо\n', 'utf8');
+writeFileSync(join(root, 'start.bat'), '@echo off\necho Kaitos\n', 'utf8');
 writeFileSync(join(root, 'node_modules/secret.js'), 'nope', 'utf8');
 
 await check('защита путей блокирует выход за проект', () => {
@@ -68,6 +69,7 @@ await check('список файлов без node_modules', async () => {
   const list = await files.list();
   if (!list.includes('src/main.js')) throw new Error(`нет src/main.js: ${list.join(',')}`);
   if (!list.includes('README.md')) throw new Error('нет README.md');
+  if (!list.includes('start.bat')) throw new Error('нет start.bat');
   if (list.some((path) => path.startsWith('node_modules'))) throw new Error('node_modules попал в список');
   return `${list.length} файлов`;
 });
@@ -75,6 +77,8 @@ await check('список файлов без node_modules', async () => {
 await check('чтение и запись файла', async () => {
   const content = await files.read('src/main.js');
   if (!content.includes('export const x = 1;')) throw new Error('неверное содержимое');
+  const batch = await files.read('start.bat');
+  if (!batch.includes('echo Kaitos')) throw new Error('неверное содержимое start.bat');
   const written = await files.write('src/new/deep.js', 'export const deep = true;\n');
   if (!written.created) throw new Error('файл не помечен как созданный');
   const onDisk = readFileSync(join(root, 'src/new/deep.js'), 'utf8');
@@ -169,6 +173,12 @@ await check('GET /api/file отдаёт содержимое', async () => {
   return body.path;
 });
 
+await check('GET /api/file читает Windows batch-скрипты как текст', async () => {
+  const { status, body } = await api.get('/file?path=start.bat');
+  if (status !== 200 || !body.content.includes('echo Kaitos')) throw new Error(JSON.stringify(body));
+  return body.path;
+});
+
 await check('POST /api/file записывает файл', async () => {
   const { status, body } = await api.post('/file', { path: 'src/from-api.js', content: 'export const api = 1;\n' });
   if (status !== 200 || body.ok !== true) throw new Error(JSON.stringify(body));
@@ -223,6 +233,88 @@ await check('токен: без заголовка 401, с заголовком 
  * Ловит поломку «файл не считается главным»: на Windows в argv[1] обратные слэши,
  * и проверка через endsWith('server/index.js') всегда ложна — сервер молча не стартует.
  */
+await check('GET /api/search возвращает только безопасные источники', async () => {
+  const html = `
+    <div class="result"><a class="result__a" href="https://example.org/docs">Example &amp; docs</a>
+      <a class="result__snippet">Полезный <b>фрагмент</b> для поиска.</a></div>
+    <div class="result"><a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.net%2Fguide">Guide</a>
+      <span class="result__snippet">Второй источник.</span></div>
+    <div class="result"><a class="result__a" href="javascript:alert(1)">опасная ссылка</a></div>`;
+  let capturedQuery = '';
+  const featureServer = createServer({
+    root, watchFiles: false,
+    searchProvider: async (query) => { capturedQuery = query; return html; },
+  });
+  await new Promise((resolve) => featureServer.listen(0, '127.0.0.1', resolve));
+  const response = await fetch(`http://127.0.0.1:${featureServer.address().port}/api/search?q=${encodeURIComponent('проверка Kaitos')}`);
+  const body = await response.json();
+  await new Promise((resolve) => featureServer.close(resolve));
+  if (response.status !== 200 || capturedQuery !== 'проверка Kaitos') throw new Error(JSON.stringify(body));
+  if (body.results.length !== 2) throw new Error(`результатов ${body.results.length}`);
+  if (body.results[0].title !== 'Example & docs' || !body.results[0].snippet.includes('Полезный фрагмент')) throw new Error(JSON.stringify(body.results[0]));
+  if (body.results[1].url !== 'https://example.net/guide') throw new Error(body.results[1].url);
+  return `${body.results.length} ссылок, опасная схема отфильтрована`;
+});
+
+await check('поиск валидирует запрос до обращения к провайдеру', async () => {
+  let providerCalls = 0;
+  const featureServer = createServer({
+    root, watchFiles: false,
+    searchProvider: async () => { providerCalls += 1; return ''; },
+  });
+  await new Promise((resolve) => featureServer.listen(0, '127.0.0.1', resolve));
+  const endpoint = `http://127.0.0.1:${featureServer.address().port}/api/search`;
+  const empty = await fetch(endpoint);
+  const tooLong = await fetch(`${endpoint}?q=${'x'.repeat(501)}`);
+  await new Promise((resolve) => featureServer.close(resolve));
+  if (empty.status !== 400 || tooLong.status !== 400) throw new Error(`empty=${empty.status}, long=${tooLong.status}`);
+  if (providerCalls !== 0) throw new Error(`провайдер вызван ${providerCalls} раз`);
+  return 'пустая и слишком длинная строка отклонены без внешнего запроса';
+});
+
+await check('POST /api/browser/screenshot ограничивает цель и размеры', async () => {
+  const png = Buffer.alloc(24);
+  Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(png, 0);
+  png.write('IHDR', 12, 'ascii');
+  png.writeUInt32BE(800, 16);
+  png.writeUInt32BE(600, 20);
+  let captureCalls = 0;
+  const featureServer = createServer({
+    root, token: 'screen-token', watchFiles: false,
+    screenshotCapture: async ({ url, width, height }) => {
+      captureCalls += 1;
+      if (url !== 'http://localhost:5173/' || width !== 800 || height !== 600) throw new Error('параметры потеряны');
+      return png;
+    },
+  });
+  await new Promise((resolve) => featureServer.listen(0, '127.0.0.1', resolve));
+  const endpoint = `http://127.0.0.1:${featureServer.address().port}/api/browser/screenshot`;
+  const valid = await fetch(endpoint, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Kaitos-Token': 'screen-token' },
+    body: JSON.stringify({ url: 'http://localhost:5173/', width: 800, height: 600 }),
+  });
+  const body = await valid.json();
+  const remote = await fetch(endpoint, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Kaitos-Token': 'screen-token' },
+    body: JSON.stringify({ url: 'http://example.com/', width: 800, height: 600 }),
+  });
+  const invalidSize = await fetch(endpoint, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Kaitos-Token': 'screen-token' },
+    body: JSON.stringify({ url: 'http://127.0.0.1/', width: 2000, height: 600 }),
+  });
+  const unauthorized = await fetch(endpoint, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: 'http://127.0.0.1/', width: 800, height: 600 }),
+  });
+  await new Promise((resolve) => featureServer.close(resolve));
+  if (valid.status !== 200 || body.width !== 800 || body.height !== 600 || body.mimeType !== 'image/png') throw new Error(JSON.stringify(body));
+  if (Buffer.from(body.imageBase64, 'base64').length !== png.length) throw new Error('base64 изображения повреждён');
+  if (remote.status !== 400 || invalidSize.status !== 400) throw new Error(`remote=${remote.status}, size=${invalidSize.status}`);
+  if (unauthorized.status !== 401) throw new Error(`без токена: ${unauthorized.status}`);
+  if (captureCalls !== 1) throw new Error(`браузер вызван ${captureCalls} раз`);
+  return 'localhost разрешён; удалённый адрес, неверный размер и отсутствие токена отклонены';
+});
+
 await check('сервер запускается как отдельная программа', async () => {
   const port = 5900 + Math.floor(Math.random() * 90);
   const child = spawn(process.execPath, ['server/index.js'], {

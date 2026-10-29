@@ -14,6 +14,14 @@ const run = promisify(execFile);
 const TIMEOUT = 15000;
 const MAX_DIFF = 300 * 1024;
 
+export class GitError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'GitError';
+    this.statusCode = 400;
+  }
+}
+
 const STATUS_NAMES = {
   M: 'modified',
   A: 'added',
@@ -78,6 +86,66 @@ export function createGit({ root } = {}) {
     }
     const changes = parseStatus(await git(['status', '--porcelain=v1']));
     return { ok: true, repo: true, branch, changes };
+  }
+
+  async function branches() {
+    const current = await status();
+    if (!current.repo) return { ok: true, repo: false, current: null, branches: [] };
+    const text = await git(['for-each-ref', '--format=%(refname:short)', 'refs/heads']);
+    return {
+      ok: true,
+      repo: true,
+      current: current.branch || null,
+      branches: text.split('\n').map((branch) => branch.trim()).filter(Boolean),
+    };
+  }
+
+  async function compare(branch) {
+    const name = String(branch || '').trim();
+    if (!name) throw new GitError('Выберите ветку для сравнения');
+    const availableBranches = await branches();
+    if (!availableBranches.repo) throw new GitError('Это не git-репозиторий');
+    if (!availableBranches.branches.includes(name)) throw new GitError(`Локальная ветка не найдена: ${name}`);
+
+    const current = availableBranches.current;
+    if (name === current) return { ok: true, from: current, to: name, changes: [] };
+    const text = await git(['diff', '--name-status', '-z', '--find-renames', 'HEAD', `refs/heads/${name}`, '--']);
+    const parts = text.split('\0');
+    const changes = [];
+    for (let index = 0; index < parts.length;) {
+      const code = parts[index++];
+      if (!code) continue;
+      const status = code[0];
+      if (status === 'R' || status === 'C') {
+        const oldPath = parts[index++];
+        const path = parts[index++];
+        changes.push({ path, oldPath, status: STATUS_NAMES[status] || 'modified' });
+      } else {
+        changes.push({ path: parts[index++], status: STATUS_NAMES[status] || 'modified' });
+      }
+      if (changes.length > 1000) throw new GitError('Слишком много отличающихся файлов (лимит 1000)');
+    }
+    return { ok: true, from: current, to: name, changes };
+  }
+
+  async function checkout(branch) {
+    const name = String(branch || '').trim();
+    if (!name) throw new GitError('Выберите ветку');
+    const current = await status();
+    if (!current.repo) throw new GitError('Это не git-репозиторий');
+    if (current.changes.length) {
+      throw new GitError('Сначала сохраните или закоммитьте изменения — переключение с грязной копией запрещено');
+    }
+    const availableBranches = await branches();
+    if (!availableBranches.branches.includes(name)) throw new GitError(`Локальная ветка не найдена: ${name}`);
+    if (name === current.branch) return { ok: true, branch: name, changed: false };
+    try {
+      await git(['switch', name]);
+    } catch (error) {
+      const output = `${error.stderr || ''}${error.stdout || ''}`.trim();
+      throw new GitError(`Не удалось переключить ветку: ${output || error.message}`);
+    }
+    return { ok: true, branch: name, changed: true };
   }
 
   async function diff(path) {
@@ -153,5 +221,5 @@ export function createGit({ root } = {}) {
     return { ok: true, hash, files: before.length };
   }
 
-  return { git, available, status, diff, log, commit, root };
+  return { git, available, status, branches, compare, checkout, diff, log, commit, root };
 }

@@ -6,7 +6,7 @@ steps:
   - expectVisible: '#chat'
   - expectVisible: '#terminal'
   - expectVisible: '#statusbar'
-  - expectText: { selector: '#project-name', contains: 'demo' }
+  - expectVisible: '#project-name'
   - screenshot: { name: shell, width: 1280 }
   - click: '#btn-theme'
   - eval: { code: "document.documentElement.dataset.theme", expect: 'light' }

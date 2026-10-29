@@ -13,6 +13,8 @@ import { initTerminal } from './terminal.js';
 import { initSettings, loadSettings, saveSettings, applySettings } from './settings.js';
 import { initPalette } from './palette.js';
 import { initGit } from './git.js';
+import { initProject } from './project.js';
+import { createActivityLog } from './activity-log.js';
 import { createLlm } from './llm.js';
 import { createApi } from './api.js';
 import { createRemoteFs } from './fs-remote.js';
@@ -67,7 +69,7 @@ async function connectStorage() {
     const remote = createRemoteFs({ api, name: health.root || 'project' });
     const stats = await remote.load();
     ctx.fs = remote;
-    return { mode: 'disk', name: remote.name(), files: stats.files, skipped: stats.skipped };
+    return { mode: 'disk', root: health.root || '', name: remote.name(), files: stats.files, skipped: stats.skipped };
   } catch (error) {
     return { mode: 'demo', reason: error.message };
   }
@@ -119,11 +121,16 @@ async function boot() {
   applySettings(ctx.settings);
 
   const storage = await connectStorage();
+  const projectRoot = storage.root || '';
+  delete storage.root;
+  ctx.storage = storage;
+  ctx.activity = createActivityLog({ root: projectRoot, name: ctx.fs.name() });
 
   ctx.llm = createLlm(ctx);
   ctx.editor = initEditor(ctx);
   ctx.tree = initTree(ctx);
   ctx.chat = initChat(ctx);
+  ctx.project = initProject(ctx, { root: projectRoot });
   ctx.terminal = initTerminal(ctx);
   ctx.settingsApi = initSettings(ctx);
   ctx.palette = initPalette(ctx);
@@ -167,8 +174,8 @@ async function boot() {
 
   startWatchingDisk(storage);
 
+  ctx.activity?.record('app-started', `Kaitos запущен: ${storage.mode === 'disk' ? `локальный проект ${storage.name}` : 'демо-режим'}`);
   ctx.ready = true;
-  ctx.storage = storage;
   if (ctx.git) ctx.git.refresh();
   window.Kaitos = ctx;
   window.dispatchEvent(new window.CustomEvent('kaitos:ready', { detail: storage }));
