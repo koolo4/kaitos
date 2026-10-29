@@ -13,7 +13,7 @@ import { toPosix } from './paths.js';
 const HIDDEN = ['.git', '.justai', 'node_modules', 'dist', '.vite', '.cache', '.arena'];
 const TEXT_EXT = new Set([
   'js', 'mjs', 'cjs', 'jsx', 'ts', 'tsx', 'css', 'scss', 'html', 'htm', 'json', 'md', 'txt',
-  'yml', 'yaml', 'sh', 'py', 'rs', 'go', 'java', 'c', 'h', 'cpp', 'sql', 'toml', 'ini', 'env',
+  'yml', 'yaml', 'sh', 'bat', 'py', 'rs', 'go', 'java', 'c', 'h', 'cpp', 'sql', 'toml', 'ini', 'env',
 ]);
 const DEBOUNCE_MS = 60;
 

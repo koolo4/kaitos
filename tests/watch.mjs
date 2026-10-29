@@ -12,7 +12,7 @@ import { createRemoteFs } from '../js/fs-remote.js';
 const { check, result } = reporter('Слежение за файлами');
 
 await check('какие файлы отслеживаются', () => {
-  const tracked = ['src/main.js', 'README.md', 'a/b/c.css', 'data.json'];
+  const tracked = ['src/main.js', 'README.md', 'a/b/c.css', 'data.json', 'start.bat'];
   const ignored = [
     'node_modules/x.js',
     '.git/config',
@@ -168,7 +168,11 @@ await check('sync добавляет и удаляет файлы', async () => 
   api.state.pending = [{ path: 'docs/new.md', type: 'removed' }];
   await remote.sync();
   if (remote.has('docs/new.md')) throw new Error('файл не удалён');
-  return 'добавлен → удалён';
+  const readsBeforeMissingRemoval = api.state.reads;
+  api.state.pending = [{ path: 'tests/fixtures/project-manager-generated.js', type: 'removed' }];
+  await remote.sync();
+  if (api.state.reads !== readsBeforeMissingRemoval) throw new Error('для отсутствующего файла выполнено лишнее чтение API');
+  return 'добавлен → удалён; удаление неизвестного файла не запрашивает его содержимое';
 });
 
 await check('файл с несохранёнными правками не перезаписывается', async () => {

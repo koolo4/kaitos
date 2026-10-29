@@ -17,6 +17,7 @@ mkdirSync(join(root, 'src'), { recursive: true });
 mkdirSync(join(root, 'node_modules'), { recursive: true });
 writeFileSync(join(root, 'src/main.js'), "export const x = 1;\n", 'utf8');
 writeFileSync(join(root, 'README.md'), '# Демо\n', 'utf8');
+writeFileSync(join(root, 'start.bat'), '@echo off\necho Kaitos\n', 'utf8');
 writeFileSync(join(root, 'node_modules/secret.js'), 'nope', 'utf8');
 
 await check('защита путей блокирует выход за проект', () => {
@@ -68,6 +69,7 @@ await check('список файлов без node_modules', async () => {
   const list = await files.list();
   if (!list.includes('src/main.js')) throw new Error(`нет src/main.js: ${list.join(',')}`);
   if (!list.includes('README.md')) throw new Error('нет README.md');
+  if (!list.includes('start.bat')) throw new Error('нет start.bat');
   if (list.some((path) => path.startsWith('node_modules'))) throw new Error('node_modules попал в список');
   return `${list.length} файлов`;
 });
@@ -75,6 +77,8 @@ await check('список файлов без node_modules', async () => {
 await check('чтение и запись файла', async () => {
   const content = await files.read('src/main.js');
   if (!content.includes('export const x = 1;')) throw new Error('неверное содержимое');
+  const batch = await files.read('start.bat');
+  if (!batch.includes('echo Kaitos')) throw new Error('неверное содержимое start.bat');
   const written = await files.write('src/new/deep.js', 'export const deep = true;\n');
   if (!written.created) throw new Error('файл не помечен как созданный');
   const onDisk = readFileSync(join(root, 'src/new/deep.js'), 'utf8');
@@ -166,6 +170,12 @@ await check('GET /api/files', async () => {
 await check('GET /api/file отдаёт содержимое', async () => {
   const { body } = await api.get('/file?path=src/main.js');
   if (!body.content.includes('export const x')) throw new Error('нет содержимого');
+  return body.path;
+});
+
+await check('GET /api/file читает Windows batch-скрипты как текст', async () => {
+  const { status, body } = await api.get('/file?path=start.bat');
+  if (status !== 200 || !body.content.includes('echo Kaitos')) throw new Error(JSON.stringify(body));
   return body.path;
 });
 

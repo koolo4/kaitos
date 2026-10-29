@@ -11,7 +11,7 @@ const MAX_FILE_BYTES = 2 * 1024 * 1024; // 2 МБ на файл
 const SKIP_DIRS = new Set(['.git', '.justai', 'node_modules', 'dist', '.vite']);
 const TEXT_EXTENSIONS = new Set([
   'js', 'mjs', 'cjs', 'ts', 'tsx', 'jsx', 'json', 'css', 'scss', 'html', 'htm', 'md', 'txt',
-  'yml', 'yaml', 'sh', 'env', 'gitignore', 'svg', 'xml', 'toml', 'ini', 'py', 'rb', 'go', 'rs',
+  'yml', 'yaml', 'sh', 'bat', 'env', 'gitignore', 'svg', 'xml', 'toml', 'ini', 'py', 'rb', 'go', 'rs',
 ]);
 
 export function createFileService(root) {
